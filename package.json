@@ -1,11 +1,14 @@
 {
-  "name": "internal-process-manager",
+  "name": "wolf-multi-bot",
   "version": "1.0.0",
   "type": "module",
-  "description": "General purpose automation script",
+  "description": "12-account automation bot with queue system",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
