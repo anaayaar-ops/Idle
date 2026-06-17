@@ -15,7 +15,9 @@ const accounts = [
   { identity: process.env.U_MAIL_9, secret: process.env.U_PASS_9 },
   { identity: process.env.U_MAIL_10, secret: process.env.U_PASS_10 },
   { identity: process.env.U_MAIL_11, secret: process.env.U_PASS_11 },
-  { identity: process.env.U_MAIL_12, secret: process.env.U_PASS_12 }
+  { identity: process.env.U_MAIL_12, secret: process.env.U_PASS_12 },
+  { identity: process.env.U_MAIL_13, secret: process.env.U_PASS_13 },
+  { identity: process.env.U_MAIL_14, secret: process.env.U_PASS_14 }
 ];
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
