@@ -30,7 +30,7 @@ const accounts = [
 const ACTIVE_ACCOUNTS = [3, 5, 11];
 // [] = استقبال المعزز من أي عضوية
 
-const ALLOWED_BONUS_SENDERS = [39369782];
+const ALLOWED_BONUS_SENDERS = [];
 
 // الكلمة / الأمر الذي يرسله داخل الغرفة
 const SEND_COMMAND = "!اسرق 5";
