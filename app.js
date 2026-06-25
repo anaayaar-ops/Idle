@@ -27,11 +27,10 @@ const accounts = [
 // [] = تشغيل جميع الحسابات
 // [13] = تشغيل الحساب 13 فقط
 // [13, 14] = تشغيل الحسابين 13 و14
-const ACTIVE_ACCOUNTS = [];
-
+const ACTIVE_ACCOUNTS = [3, 5, 11];
 // [] = استقبال المعزز من أي عضوية
 
-const ALLOWED_BONUS_SENDERS = [];
+const ALLOWED_BONUS_SENDERS = [39369782];
 
 // الكلمة / الأمر الذي يرسله داخل الغرفة
 const SEND_COMMAND = "!اسرق 5";
