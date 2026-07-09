@@ -61,12 +61,7 @@ jobs:
 
           U_MAIL_12: ${{ secrets.U_MAIL_12 }}
           U_PASS_12: ${{ secrets.U_PASS_12 }}
-          
-          U_MAIL_13: ${{ secrets.U_MAIL_13 }}
-          U_PASS_13: ${{ secrets.U_PASS_13 }}
-          
-          U_MAIL_14: ${{ secrets.U_MAIL_14 }}
-          U_PASS_14: ${{ secrets.U_PASS_14 }}
+    
 
         run: |
           echo "🚀 بدء تشغيل البوت (5H / 10M)"
