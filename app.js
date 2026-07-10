@@ -74,6 +74,7 @@ const { WOLF } = wolfjs.default || wolfjs;
 // =========================================================================
 
 const TRACKED_BOT_ID = 80277459; // آيدي البوت الذي يرسل رسالة "انتهى السباق"
+const RACE_ROOM_ID = 569;
 
 const ACCOUNTS = [
     { email: process.env.U_MAIL_1, password: process.env.U_PASS_1, name: 'King', id: 38770375, index: 1, sChannel: 569 },
@@ -217,6 +218,18 @@ function getMessageText(message) {
     ''
   ).toString().trim();
 }
+function getRoomId(message) {
+  return Number(
+    message.targetChannelId ||
+    message.targetGroupId ||
+    message.groupId ||
+    message.channelId ||
+    message.recipientGroupId ||
+    message.group?.id ||
+    message.channel?.id ||
+    0
+  );
+}
 const raceManager = new RaceManager();
 
 // =========================================================================
@@ -230,15 +243,25 @@ function createBot(config) {
         await globalQueue.add(client, config.sChannel, `!س جلد خاص ${config.id}`);
     }
 
-   async function handleIncomingMessage(message) {
+  async function handleIncomingMessage(message) {
     try {
         const senderId = getSenderId(message);
+        const roomId = getRoomId(message);
         let body = getMessageText(message);
 
         if (!body) return;
+
+        // لا يستقبل إلا من بوت السباق
         if (senderId !== Number(TRACKED_BOT_ID)) return;
 
+        // لا يستقبل إلا من روم السباق
+        if (roomId !== Number(RACE_ROOM_ID)) return;
+
+        // تنظيف الرموز المخفية
         body = body.replace(/[\u200B-\u200F\uFEFF\u2060]/g, '');
+
+        // لا يعالج إلا رسالة انتهاء السباق فقط
+        if (!body.includes("انتهى السباق")) return;
 
         await raceManager.handleRaceEndMessage(body);
 
@@ -246,9 +269,9 @@ function createBot(config) {
         console.error(`❌ [${config.name}] خطأ استقبال: ${err.message}`);
     }
 }
-
+  
 client.on('message', handleIncomingMessage);
-client.on('messageUpdate', handleIncomingMessage);
+
 client.on('groupMessage', handleIncomingMessage);
 
     client.on('ready', () => {
