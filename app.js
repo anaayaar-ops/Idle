@@ -144,6 +144,8 @@ class RaceManager {
     if (!ids.length) return;
 
     const extractedId = ids[ids.length - 1][1];
+     
+     console.log(`🔎 تم استخراج ID من رسالة انتهاء السباق: ${extractedId}`);
        // منع معالجة نفس الرسالة أكثر من مرة
 const now = Date.now();
 
@@ -175,9 +177,23 @@ this.currentTurnIndex =
 this.triggerNext();
        }
     async triggerNext() {
-        const nextBot = this.clientsMap.get(this.currentTurnIndex);
-        if (!nextBot) return;
+       let nextBot = this.clientsMap.get(this.currentTurnIndex);
 
+if (!nextBot) {
+    console.log(`⚠️ الحساب رقم ${this.currentTurnIndex} غير متصل أو غير مسجل، سيتم الانتقال للي بعده`);
+
+    this.currentTurnIndex =
+        this.currentTurnIndex >= ACCOUNTS.length
+            ? 1
+            : this.currentTurnIndex + 1;
+
+    nextBot = this.clientsMap.get(this.currentTurnIndex);
+
+    if (!nextBot) {
+        console.log(`❌ لا يوجد حساب جاهز حاليًا عند الرقم ${this.currentTurnIndex}`);
+        return;
+    }
+}
         const twelveMinutes = 12 * 60 * 1000;
         const lastPlayed = this.lastTurnTime[this.currentTurnIndex] || 0;
         const now = Date.now();
@@ -262,6 +278,7 @@ function createBot(config) {
 
         // لا يعالج إلا رسالة انتهاء السباق فقط
         if (!body.includes("انتهى السباق")) return;
+      console.log(`📩 وصلت رسالة انتهاء السباق من البوت في الروم: ${body}`);
 
         await raceManager.handleRaceEndMessage(body);
 
