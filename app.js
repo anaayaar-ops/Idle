@@ -287,9 +287,10 @@ function createBot(config) {
     }
 }
   
-client.on('message', handleIncomingMessage);
-
-client.on('groupMessage', handleIncomingMessage);
+if (config.index === 1) {
+    client.on('message', handleIncomingMessage);
+    client.on('groupMessage', handleIncomingMessage);
+}
 
     client.on('ready', () => {
         console.log(`✅ ${config.name} متصل.`);
