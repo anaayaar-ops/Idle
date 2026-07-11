@@ -84,6 +84,9 @@ const { WOLF } = wolfjs.default || wolfjs;
 const TRACKED_BOT_ID = 80277459;
 const RACE_ROOM_ID = 569;
 
+// إذا بدأ حساب وما وصلت رسالة انتهاء السباق خلال هذا الوقت، يتجاوزه
+const RACE_END_TIMEOUT_MS = 120 * 1000;
+
 const ACCOUNTS = [
   { email: process.env.U_MAIL_1,  password: process.env.U_PASS_1,  name: 'King', id: 38770375, index: 1,  sChannel: 569 },
   { email: process.env.U_MAIL_2,  password: process.env.U_PASS_2,  name: 'KSA',  id: 27112980, index: 2,  sChannel: 569 },
@@ -211,7 +214,6 @@ class RaceManager {
   constructor() {
     this.currentTurnIndex = 1;
     this.clientsMap = new Map();
-
     this.accountStates = new Map();
 
     this.isRaceRunning = false;
@@ -221,6 +223,8 @@ class RaceManager {
     this.lastRaceTime = 0;
 
     this.hasStarted = false;
+
+    this.raceWatchdog = null;
   }
 
   registerClient(index, config, client, triggerFunc) {
@@ -234,6 +238,10 @@ class RaceManager {
     }
 
     console.log(`🧩 تم تسجيل الحساب ${config.name} في المدير.`);
+
+    if (this.hasStarted && !this.isRaceRunning && this.currentTurnIndex === index) {
+      this.tryStartCurrentTurn();
+    }
   }
 
   getState(index) {
@@ -257,10 +265,38 @@ class RaceManager {
     this.tryStartCurrentTurn();
   }
 
-  async tryStartCurrentTurn() {
-    if (this.isRaceRunning) {
-      return;
+  startRaceWatchdog(index) {
+    this.clearRaceWatchdog();
+
+    this.raceWatchdog = setTimeout(() => {
+      if (this.isRaceRunning && this.activeRaceIndex === index) {
+        const bot = this.clientsMap.get(index);
+        const state = this.getState(index);
+
+        console.log(`⚠️ لم تصل رسالة انتهاء السباق لـ ${bot?.config?.name || index} خلال ${RACE_END_TIMEOUT_MS / 1000} ثانية، سيتم تجاوزه.`);
+
+        state.inRace = false;
+
+        this.isRaceRunning = false;
+        this.activeRaceIndex = null;
+
+        this.currentTurnIndex =
+          index >= ACCOUNTS.length ? 1 : index + 1;
+
+        this.tryStartCurrentTurn();
+      }
+    }, RACE_END_TIMEOUT_MS);
+  }
+
+  clearRaceWatchdog() {
+    if (this.raceWatchdog) {
+      clearTimeout(this.raceWatchdog);
+      this.raceWatchdog = null;
     }
+  }
+
+  async tryStartCurrentTurn() {
+    if (this.isRaceRunning) return;
 
     const currentBot = this.clientsMap.get(this.currentTurnIndex);
 
@@ -290,6 +326,8 @@ class RaceManager {
     console.log(`🎯 [${currentBot.config.name}] حان دوري، جاري الجلد...`);
 
     await currentBot.triggerFunc();
+
+    this.startRaceWatchdog(this.currentTurnIndex);
   }
 
   handleEnergyReady(accountIndex) {
@@ -338,14 +376,17 @@ class RaceManager {
 
     finishedState.inRace = false;
 
+    if (this.activeRaceIndex !== finishedIndex) {
+      console.log(`⚠️ وصلت نهاية سباق لـ ${finishedBot.config.name} لكنه ليس الحساب النشط حاليًا، تم تجاهلها.`);
+      return;
+    }
+
     console.log(`🏁 [السباق] الحساب ${finishedBot.config.name} أنهى السباق.`);
 
-    if (this.activeRaceIndex === finishedIndex) {
-      this.isRaceRunning = false;
-      this.activeRaceIndex = null;
-    } else {
-      console.log(`⚠️ وصلت نهاية سباق لحساب ${finishedBot.config.name} لكنه ليس الحساب النشط حاليًا.`);
-    }
+    this.clearRaceWatchdog();
+
+    this.isRaceRunning = false;
+    this.activeRaceIndex = null;
 
     this.currentTurnIndex =
       finishedIndex >= ACCOUNTS.length
@@ -392,10 +433,8 @@ function createBot(config) {
       }
 
       // رسائل انتهاء السباق تكون في الروم
+      // كل الحسابات تقدر تلتقط الرسالة، والمدير يمنع التكرار
       if (roomId === Number(RACE_ROOM_ID) && body.includes('انتهى السباق')) {
-        // حساب واحد فقط يعالج رسائل الروم عشان ما تتكرر من كل الحسابات
-        if (config.index !== 1) return;
-
         await raceManager.handleRaceEndMessage(body);
       }
 
