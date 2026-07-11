@@ -9,9 +9,16 @@ const originalWarn = console.warn.bind(console);
 const originalError = console.error.bind(console);
 
 const HIDE_LOGS = [
-  '[DEBUG]', '[WARN]', 'DEBUG', 'WARN',
-  'CleanUp', 'Synchronise', 'GroupAudioCountUpdated',
-  'MessageUpdate', 'Websocket', 'TipAdd',
+  '[DEBUG]',
+  '[WARN]',
+  'DEBUG',
+  'WARN',
+  'CleanUp',
+  'Synchronise',
+  'GroupAudioCountUpdated',
+  'MessageUpdate',
+  'Websocket',
+  'TipAdd',
   'Message from self ignoring',
   'Store Reset',
   'apiKey will be required',
@@ -65,155 +72,39 @@ process.stderr.write = (chunk, encoding, callback) => {
   return stderrWrite(chunk, encoding, callback);
 };
 
-// ================== استيراد wolf.js بالطريقة الأفضل ==================
+// ================== استيراد wolf.js ==================
 
 const wolfjs = await import('wolf.js');
 const { WOLF } = wolfjs.default || wolfjs;
+
 // =========================================================================
 // ================== 🎮 إعدادات الحسابات ==================
 // =========================================================================
 
-const TRACKED_BOT_ID = 80277459; // آيدي البوت الذي يرسل رسالة "انتهى السباق"
+const TRACKED_BOT_ID = 80277459;
 const RACE_ROOM_ID = 569;
 
 const ACCOUNTS = [
-    { email: process.env.U_MAIL_1, password: process.env.U_PASS_1, name: 'King', id: 38770375, index: 1, sChannel: 569 },
-    { email: process.env.U_MAIL_2, password: process.env.U_PASS_2, name: 'KSA', id: 27112980, index: 2, sChannel: 569 },
-    { email: process.env.U_MAIL_3, password: process.env.U_PASS_3, name: 'MKH', id: 1780249, index: 3, sChannel: 569 },
-    { email: process.env.U_MAIL_4, password: process.env.U_PASS_4, name: 'SAA', id: 2251312, index: 4, sChannel: 569 },
-    { email: process.env.U_MAIL_5, password: process.env.U_PASS_5, name: 'JDH', id: 39043364, index: 5, sChannel: 569 },
-    { email: process.env.U_MAIL_6, password: process.env.U_PASS_6, name: 'MLK', id: 34648535, index: 6, sChannel: 569 },
-    { email: process.env.U_MAIL_7, password: process.env.U_PASS_7, name: 'CRN', id: 79996355, index: 7, sChannel: 569 },
-    { email: process.env.U_MAIL_8, password: process.env.U_PASS_8, name: 'REX', id: 34435550, index: 8, sChannel: 569 },
-    { email: process.env.U_MAIL_9, password: process.env.U_PASS_9, name: 'LRD', id: 15859439, index: 9, sChannel: 569 },
-    { email: process.env.U_MAIL_10, password: process.env.U_PASS_10, name: 'ROY', id: 32198971, index: 10, sChannel: 569 },
-    { email: process.env.U_MAIL_11, password: process.env.U_PASS_11, name: 'EMP', id: 39515341, index: 11, sChannel: 569 },
-    { email: process.env.U_MAIL_12, password: process.env.U_PASS_12, name: 'NOR', id: 2374823, index: 12, sChannel: 569 }
+  { email: process.env.U_MAIL_1,  password: process.env.U_PASS_1,  name: 'King', id: 38770375, index: 1,  sChannel: 569 },
+  { email: process.env.U_MAIL_2,  password: process.env.U_PASS_2,  name: 'KSA',  id: 27112980, index: 2,  sChannel: 569 },
+  { email: process.env.U_MAIL_3,  password: process.env.U_PASS_3,  name: 'MKH',  id: 1780249,  index: 3,  sChannel: 569 },
+  { email: process.env.U_MAIL_4,  password: process.env.U_PASS_4,  name: 'SAA',  id: 2251312,  index: 4,  sChannel: 569 },
+  { email: process.env.U_MAIL_5,  password: process.env.U_PASS_5,  name: 'JDH',  id: 39043364, index: 5,  sChannel: 569 },
+  { email: process.env.U_MAIL_6,  password: process.env.U_PASS_6,  name: 'MLK',  id: 34648535, index: 6,  sChannel: 569 },
+  { email: process.env.U_MAIL_7,  password: process.env.U_PASS_7,  name: 'CRN',  id: 79996355, index: 7,  sChannel: 569 },
+  { email: process.env.U_MAIL_8,  password: process.env.U_PASS_8,  name: 'REX',  id: 34435550, index: 8,  sChannel: 569 },
+  { email: process.env.U_MAIL_9,  password: process.env.U_PASS_9,  name: 'LRD',  id: 15859439, index: 9,  sChannel: 569 },
+  { email: process.env.U_MAIL_10, password: process.env.U_PASS_10, name: 'ROY',  id: 32198971, index: 10, sChannel: 569 },
+  { email: process.env.U_MAIL_11, password: process.env.U_PASS_11, name: 'EMP',  id: 39515341, index: 11, sChannel: 569 },
+  { email: process.env.U_MAIL_12, password: process.env.U_PASS_12, name: 'NOR',  id: 2374823,  index: 12, sChannel: 569 }
 ];
 
-// =========================================================================
-// ================== 🛡️ طابور الأمان (لمنع السبام) ==================
-// =========================================================================
-class SafeQueue {
-    constructor() {
-        this.queue = [];
-        this.isProcessing = false;
-    }
-    async add(client, channelId, command) {
-        return new Promise((resolve) => {
-            this.queue.push({ client, channelId, command, resolve });
-            this.process();
-        });
-    }
-    async process() {
-        if (this.isProcessing || this.queue.length === 0) return;
-        this.isProcessing = true;
-        const { client, channelId, command, resolve } = this.queue.shift();
-        try {
-            await client.messaging.sendChannelMessage(Number(channelId), command);
-            await new Promise(r => setTimeout(r, 2000)); // تأخير 2 ثانية للحماية
-        } catch (err) { console.error(`❌ خطأ إرسال:`, err.message); }
-        this.isProcessing = false;
-        resolve();
-        this.process();
-    }
-}
-const globalQueue = new SafeQueue();
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // =========================================================================
-// ================== 🚦 مدير السباق والطاقة (12 دقيقة) ==================
+// ================== أدوات قراءة الرسائل ==================
 // =========================================================================
-class RaceManager {
-    constructor() {
-    this.currentTurnIndex = 1;
-    this.lastTurnTime = {};
-    this.clientsMap = new Map();
 
-    this.lastProcessedRaceKey = '';
-    this.lastProcessedRaceTime = 0;
-}
-    registerClient(index, config, client, triggerFunc) {
-        this.clientsMap.set(index, { config, client, triggerFunc });
-    }
-   async handleRaceEndMessage(body) {
-    body = String(body || '').replace(/[\u200B-\u200F\uFEFF\u2060]/g, '');
-
-    if (!body.includes("انتهى السباق")) return;
-
-    const ids = [...body.matchAll(/\((\d+)\)/g)];
-    if (!ids.length) return;
-
-    const extractedId = ids[ids.length - 1][1];
-     
-     console.log(`🔎 تم استخراج ID من رسالة انتهاء السباق: ${extractedId}`);
-       // منع معالجة نفس الرسالة أكثر من مرة
-const now = Date.now();
-
-if (
-    this.lastRaceId === extractedId &&
-    now - this.lastRaceTime < 3000
-) {
-    return;
-}
-
-this.lastRaceId = extractedId;
-this.lastRaceTime = now;
-
-  const finishedBot = [...this.clientsMap.values()]
-    .find(bot => String(bot.config.id) === extractedId);
-
-if (!finishedBot) {
-    console.log(`⚠️ لم يتم العثور على الحساب صاحب الـ ID: ${extractedId}`);
-    return;
-}
-
-console.log(`🏁 [السباق] الحساب ${finishedBot.config.name} أنهى السباق.`);
-
-this.currentTurnIndex =
-    finishedBot.config.index >= ACCOUNTS.length
-        ? 1
-        : finishedBot.config.index + 1;
-
-this.triggerNext();
-       }
-    async triggerNext() {
-       let nextBot = this.clientsMap.get(this.currentTurnIndex);
-
-if (!nextBot) {
-    console.log(`⚠️ الحساب رقم ${this.currentTurnIndex} غير متصل أو غير مسجل، سيتم الانتقال للي بعده`);
-
-    this.currentTurnIndex =
-        this.currentTurnIndex >= ACCOUNTS.length
-            ? 1
-            : this.currentTurnIndex + 1;
-
-    nextBot = this.clientsMap.get(this.currentTurnIndex);
-
-    if (!nextBot) {
-        console.log(`❌ لا يوجد حساب جاهز حاليًا عند الرقم ${this.currentTurnIndex}`);
-        return;
-    }
-}
-        const twelveMinutes = 12 * 60 * 1000;
-        const lastPlayed = this.lastTurnTime[this.currentTurnIndex] || 0;
-        const now = Date.now();
-        const diff = now - lastPlayed;
-
-        if (diff >= twelveMinutes) {
-            // الطاقة مكتملة، نفذ الأمر فوراً
-            this.lastTurnTime[this.currentTurnIndex] = Date.now();
-            nextBot.triggerFunc();
-        } else {
-            // الطاقة لم تكتمل، انتظر الوقت المتبقي
-            const waitTime = twelveMinutes - diff;
-            console.log(`⏳ [طاقة] ${nextBot.config.name} ينتظر ${Math.ceil(waitTime/1000)} ثانية لإكتمال الطاقة.`);
-            setTimeout(() => {
-                this.lastTurnTime[this.currentTurnIndex] = Date.now();
-                nextBot.triggerFunc();
-            }, waitTime);
-        }
-    }
-}
 function getSenderId(message) {
   return Number(
     message.sourceSubscriberId ||
@@ -234,6 +125,7 @@ function getMessageText(message) {
     ''
   ).toString().trim();
 }
+
 function getRoomId(message) {
   return Number(
     message.targetChannelId ||
@@ -246,64 +138,307 @@ function getRoomId(message) {
     0
   );
 }
+
+function cleanText(text) {
+  return String(text || '').replace(/[\u200B-\u200F\uFEFF\u2060]/g, '').trim();
+}
+
+function isEnergyReadyMessage(text) {
+  const body = cleanText(text).toLowerCase();
+
+  return (
+    body.includes('your animal is back to full energy') ||
+    body.includes('عاد حيوانك لطاقته الكاملة') ||
+    body.includes('طاقته الكاملة') ||
+    body.includes('full energy')
+  );
+}
+
+function extractLastIdFromRaceMessage(body) {
+  const cleanBody = cleanText(body);
+  const ids = [...cleanBody.matchAll(/\((\d+)\)/g)];
+
+  if (!ids.length) return null;
+
+  return ids[ids.length - 1][1];
+}
+
+// =========================================================================
+// ================== 🛡️ طابور الإرسال ==================
+// =========================================================================
+
+class SafeQueue {
+  constructor() {
+    this.queue = [];
+    this.isProcessing = false;
+  }
+
+  async add(client, channelId, command, accountName = 'UNKNOWN') {
+    return new Promise((resolve) => {
+      this.queue.push({ client, channelId, command, accountName, resolve });
+      this.process();
+    });
+  }
+
+  async process() {
+    if (this.isProcessing || this.queue.length === 0) return;
+
+    this.isProcessing = true;
+
+    const { client, channelId, command, accountName, resolve } = this.queue.shift();
+
+    try {
+      await client.messaging.sendChannelMessage(Number(channelId), command);
+      console.log(`📤 [${accountName}] ${command}`);
+      await sleep(2000);
+    } catch (err) {
+      console.error(`❌ [${accountName}] خطأ إرسال: ${err.message}`);
+    }
+
+    this.isProcessing = false;
+    resolve();
+    this.process();
+  }
+}
+
+const globalQueue = new SafeQueue();
+
+// =========================================================================
+// ================== 🚦 مدير السباق والطاقة ==================
+// =========================================================================
+
+class RaceManager {
+  constructor() {
+    this.currentTurnIndex = 1;
+    this.clientsMap = new Map();
+
+    this.accountStates = new Map();
+
+    this.isRaceRunning = false;
+    this.activeRaceIndex = null;
+
+    this.lastRaceId = null;
+    this.lastRaceTime = 0;
+
+    this.hasStarted = false;
+  }
+
+  registerClient(index, config, client, triggerFunc) {
+    this.clientsMap.set(index, { config, client, triggerFunc });
+
+    if (!this.accountStates.has(index)) {
+      this.accountStates.set(index, {
+        energyReady: true,
+        inRace: false
+      });
+    }
+
+    console.log(`🧩 تم تسجيل الحساب ${config.name} في المدير.`);
+  }
+
+  getState(index) {
+    if (!this.accountStates.has(index)) {
+      this.accountStates.set(index, {
+        energyReady: true,
+        inRace: false
+      });
+    }
+
+    return this.accountStates.get(index);
+  }
+
+  start() {
+    if (this.hasStarted) return;
+
+    this.hasStarted = true;
+    this.currentTurnIndex = 1;
+
+    console.log('🚀 بدء نظام السباق من الحساب الأول.');
+    this.tryStartCurrentTurn();
+  }
+
+  async tryStartCurrentTurn() {
+    if (this.isRaceRunning) {
+      return;
+    }
+
+    const currentBot = this.clientsMap.get(this.currentTurnIndex);
+
+    if (!currentBot) {
+      console.log(`⚠️ الحساب رقم ${this.currentTurnIndex} غير متصل، سيتم انتظار اتصاله.`);
+      return;
+    }
+
+    const state = this.getState(this.currentTurnIndex);
+
+    if (!state.energyReady) {
+      console.log(`⏳ [طاقة] ${currentBot.config.name} لم ترجع طاقته بعد، ننتظر رسالة اكتمال الطاقة.`);
+      return;
+    }
+
+    if (state.inRace) {
+      console.log(`⏳ [سباق] ${currentBot.config.name} داخل سباق حاليًا.`);
+      return;
+    }
+
+    state.energyReady = false;
+    state.inRace = true;
+
+    this.isRaceRunning = true;
+    this.activeRaceIndex = this.currentTurnIndex;
+
+    console.log(`🎯 [${currentBot.config.name}] حان دوري، جاري الجلد...`);
+
+    await currentBot.triggerFunc();
+  }
+
+  handleEnergyReady(accountIndex) {
+    const bot = this.clientsMap.get(accountIndex);
+    const state = this.getState(accountIndex);
+
+    state.energyReady = true;
+
+    console.log(`🔋 [${bot?.config?.name || accountIndex}] رجعت طاقته وصار جاهز.`);
+
+    if (!this.isRaceRunning && accountIndex === this.currentTurnIndex) {
+      this.tryStartCurrentTurn();
+    }
+  }
+
+  async handleRaceEndMessage(body) {
+    body = cleanText(body);
+
+    if (!body.includes('انتهى السباق')) return;
+
+    const extractedId = extractLastIdFromRaceMessage(body);
+    if (!extractedId) return;
+
+    const now = Date.now();
+
+    if (
+      this.lastRaceId === extractedId &&
+      now - this.lastRaceTime < 3000
+    ) {
+      return;
+    }
+
+    this.lastRaceId = extractedId;
+    this.lastRaceTime = now;
+
+    const finishedBot = [...this.clientsMap.values()]
+      .find(bot => String(bot.config.id) === String(extractedId));
+
+    if (!finishedBot) {
+      console.log(`⚠️ لم يتم العثور على الحساب صاحب الـ ID: ${extractedId}`);
+      return;
+    }
+
+    const finishedIndex = finishedBot.config.index;
+    const finishedState = this.getState(finishedIndex);
+
+    finishedState.inRace = false;
+
+    console.log(`🏁 [السباق] الحساب ${finishedBot.config.name} أنهى السباق.`);
+
+    if (this.activeRaceIndex === finishedIndex) {
+      this.isRaceRunning = false;
+      this.activeRaceIndex = null;
+    } else {
+      console.log(`⚠️ وصلت نهاية سباق لحساب ${finishedBot.config.name} لكنه ليس الحساب النشط حاليًا.`);
+    }
+
+    this.currentTurnIndex =
+      finishedIndex >= ACCOUNTS.length
+        ? 1
+        : finishedIndex + 1;
+
+    this.tryStartCurrentTurn();
+  }
+}
+
 const raceManager = new RaceManager();
 
 // =========================================================================
-// ================== 🤖 تشغيل البوتات ==================
+// ================== 🤖 تشغيل الحسابات ==================
 // =========================================================================
-function createBot(config) {
-    const client = new WOLF();
 
-    async function triggerRaceCommand() {
-        console.log(`🎯 [${config.name}] حان دوري، جاري الجلد...`);
-        await globalQueue.add(client, config.sChannel, `!س جلد خاص ${config.id}`);
-    }
+function createBot(config) {
+  const client = new WOLF();
+
+  async function triggerRaceCommand() {
+    await globalQueue.add(
+      client,
+      config.sChannel,
+      `!س جلد خاص ${config.id}`,
+      config.name
+    );
+  }
 
   async function handleIncomingMessage(message) {
     try {
-        const senderId = getSenderId(message);
-        const roomId = getRoomId(message);
-        let body = getMessageText(message);
+      const senderId = getSenderId(message);
+      const roomId = getRoomId(message);
+      let body = getMessageText(message);
 
-        if (!body) return;
+      if (!body) return;
+      if (senderId !== Number(TRACKED_BOT_ID)) return;
 
-        // لا يستقبل إلا من بوت السباق
-        if (senderId !== Number(TRACKED_BOT_ID)) return;
+      body = cleanText(body);
 
-        // لا يستقبل إلا من روم السباق
-        if (roomId !== Number(RACE_ROOM_ID)) return;
+      // رسائل الطاقة تكون في الخاص لكل حساب
+      if (isEnergyReadyMessage(body)) {
+        raceManager.handleEnergyReady(config.index);
+        return;
+      }
 
-        // تنظيف الرموز المخفية
-        body = body.replace(/[\u200B-\u200F\uFEFF\u2060]/g, '');
-
-        // لا يعالج إلا رسالة انتهاء السباق فقط
-        if (!body.includes("انتهى السباق")) return;
-      console.log(`📩 وصلت رسالة انتهاء السباق من البوت في الروم: ${body}`);
+      // رسائل انتهاء السباق تكون في الروم
+      if (roomId === Number(RACE_ROOM_ID) && body.includes('انتهى السباق')) {
+        // حساب واحد فقط يعالج رسائل الروم عشان ما تتكرر من كل الحسابات
+        if (config.index !== 1) return;
 
         await raceManager.handleRaceEndMessage(body);
+      }
 
     } catch (err) {
-        console.error(`❌ [${config.name}] خطأ استقبال: ${err.message}`);
+      console.error(`❌ [${config.name}] خطأ استقبال: ${err.message}`);
     }
-}
-  
-if (config.index === 1) {
-    client.on('message', handleIncomingMessage);
-    client.on('groupMessage', handleIncomingMessage);
+  }
+
+  client.on('message', handleIncomingMessage);
+  client.on('groupMessage', handleIncomingMessage);
+
+  client.on('ready', () => {
+    console.log(`✅ ${config.name} متصل.`);
+
+    raceManager.registerClient(
+      config.index,
+      config,
+      client,
+      triggerRaceCommand
+    );
+
+    if (config.index === 1) {
+      setTimeout(() => raceManager.start(), 5000);
+    }
+  });
+
+  try {
+    const loginResult = client.login(config.email, config.password);
+
+    if (loginResult && typeof loginResult.catch === 'function') {
+      loginResult.catch((err) => {
+        console.error(`❌ [${config.name}] فشل تسجيل الدخول: ${err.message}`);
+      });
+    }
+  } catch (err) {
+    console.error(`❌ [${config.name}] خطأ تسجيل الدخول: ${err.message}`);
+  }
 }
 
-    client.on('ready', () => {
-        console.log(`✅ ${config.name} متصل.`);
-        raceManager.registerClient(config.index, config, client, triggerRaceCommand);
-        
-        // إطلاق الدورة الأولى بعد 5 ثوانٍ من استقرار الاتصال
-        if (config.index === 1) setTimeout(() => raceManager.triggerNext(), 5000);
-    });
+// =========================================================================
+// ================== تشغيل الحسابات بفاصل ==================
+// =========================================================================
 
-    client.login(config.email, config.password);
-}
-
-// تشغيل الحسابات بفاصل 4 ثوانٍ
 ACCOUNTS.forEach((acc, i) => {
-    setTimeout(() => createBot(acc), i * 4000);
+  setTimeout(() => createBot(acc), i * 4000);
 });
