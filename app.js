@@ -92,7 +92,7 @@ const { WOLF } = wolfjs.default || wolfjs;
 // =========================================================================
 
 const TRACKED_BOT_ID = 80277459;
-const RACE_ROOM_ID = 569;
+const RACE_ROOM_ID = 18654218;
 
 // إذا بدأ الحساب ولم تصل رسالة انتهاء السباق خلال دقيقتين
 const RACE_END_TIMEOUT_MS = 120 * 1000;
@@ -115,7 +115,7 @@ const ACCOUNTS = [
     name: 'KSA',
     id: 27112980,
     index: 2,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_3,
@@ -123,7 +123,7 @@ const ACCOUNTS = [
     name: 'MKH',
     id: 1780249,
     index: 3,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_4,
@@ -131,7 +131,7 @@ const ACCOUNTS = [
     name: 'SAA',
     id: 2251312,
     index: 4,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_5,
@@ -139,7 +139,7 @@ const ACCOUNTS = [
     name: 'JDH',
     id: 39043364,
     index: 5,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_6,
@@ -147,7 +147,7 @@ const ACCOUNTS = [
     name: 'MLK',
     id: 34648535,
     index: 6,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_7,
@@ -155,7 +155,7 @@ const ACCOUNTS = [
     name: 'CRN',
     id: 79996355,
     index: 7,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_8,
@@ -163,7 +163,7 @@ const ACCOUNTS = [
     name: 'REX',
     id: 34435550,
     index: 8,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_9,
@@ -171,7 +171,7 @@ const ACCOUNTS = [
     name: 'LRD',
     id: 15859439,
     index: 9,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_10,
@@ -179,7 +179,7 @@ const ACCOUNTS = [
     name: 'ROY',
     id: 32198971,
     index: 10,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_11,
@@ -187,7 +187,7 @@ const ACCOUNTS = [
     name: 'EMP',
     id: 39515341,
     index: 11,
-    sChannel: 569
+    sChannel: 18654218
   },
   {
     email: process.env.U_MAIL_12,
@@ -195,7 +195,7 @@ const ACCOUNTS = [
     name: 'NOR',
     id: 2374823,
     index: 12,
-    sChannel: 569
+    sChannel: 18654218
   }
 ];
 
