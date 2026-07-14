@@ -199,6 +199,27 @@ const ACCOUNTS = [
   }
 ];
 
+const ACTIVE_ACCOUNTS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+function isAccountActive(index) {
+  return ACTIVE_ACCOUNTS.includes(Number(index));
+}
+
+function getFirstActiveIndex() {
+  const sorted = [...ACTIVE_ACCOUNTS].sort((a, b) => a - b);
+  return sorted.length > 0 ? sorted[0] : null;
+}
+
+function getNextActiveIndex(currentIndex) {
+  const sorted = [...ACTIVE_ACCOUNTS].sort((a, b) => a - b);
+
+  if (sorted.length === 0) return null;
+
+  const next = sorted.find(index => index > currentIndex);
+
+  return next ?? sorted[0];
+}
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // =========================================================================
@@ -422,16 +443,23 @@ class RaceManager {
 
   // ================== بدء النظام ==================
 
-  start() {
-    if (this.hasStarted) return;
+ start() {
+  if (this.hasStarted) return;
 
-    this.hasStarted = true;
-    this.currentTurnIndex = 1;
+  const firstActiveIndex = getFirstActiveIndex();
 
-    console.log('🚀 بدء نظام السباق من الحساب الأول.');
-
-    this.tryStartCurrentTurn();
+  if (firstActiveIndex === null) {
+    console.log('❌ لا يوجد أي حساب مفعّل.');
+    return;
   }
+
+  this.hasStarted = true;
+  this.currentTurnIndex = firstActiveIndex;
+
+  console.log(`🚀 بدء نظام السباق من الحساب رقم ${firstActiveIndex}.`);
+
+  this.tryStartCurrentTurn();
+}
 
   // ================== تنظيف مؤقت انتهاء السباق ==================
 
@@ -470,10 +498,14 @@ class RaceManager {
         this.isRaceRunning = false;
         this.activeRaceIndex = null;
 
-        this.currentTurnIndex =
-          index >= ACCOUNTS.length
-            ? 1
-            : index + 1;
+      const nextActiveIndex = getNextActiveIndex(index);
+
+if (nextActiveIndex === null) {
+  console.log('❌ لا يوجد حساب مفعّل للانتقال إليه.');
+  return;
+}
+
+this.currentTurnIndex = nextActiveIndex;
 
         this.tryStartCurrentTurn();
       }
@@ -532,16 +564,25 @@ class RaceManager {
     // لا يمكن تشغيل حساب جديد أثناء وجود سباق
     if (this.isRaceRunning) return;
 
-    const turnIndex = this.currentTurnIndex;
-    const currentBot = this.clientsMap.get(turnIndex);
+  
+   const turnIndex = this.currentTurnIndex;
+const currentBot = this.clientsMap.get(turnIndex);
 
-    if (!currentBot) {
-      console.log(
-        `⚠️ الحساب رقم ${turnIndex} غير متصل، سيتم انتظار اتصاله.`
-      );
+if (!currentBot) {
 
-      return;
+    const nextActive = getNextActiveIndex(turnIndex);
+
+    if (nextActive === null) {
+        console.log('❌ لا يوجد أي حساب مفعّل.');
+        return;
     }
+
+    console.log(`⏭️ تجاوز الحساب ${turnIndex} لأنه غير متصل.`);
+
+    this.currentTurnIndex = nextActive;
+
+    return this.tryStartCurrentTurn();
+}
 
     const state = this.getState(turnIndex);
 
@@ -716,10 +757,14 @@ class RaceManager {
     this.activeRaceIndex = null;
 
     // الانتقال للحساب التالي بالترتيب
-    this.currentTurnIndex =
-      finishedIndex >= ACCOUNTS.length
-        ? 1
-        : finishedIndex + 1;
+    const nextActiveIndex = getNextActiveIndex(finishedIndex);
+
+if (nextActiveIndex === null) {
+  console.log('❌ لا يوجد حساب مفعّل للانتقال إليه.');
+  return;
+}
+
+this.currentTurnIndex = nextActiveIndex;
 
     this.tryStartCurrentTurn();
   }
@@ -815,12 +860,12 @@ function createBot(config) {
     );
 
     // بدء الدورة من الحساب الأول
-    if (config.index === 1) {
-      setTimeout(
-        () => raceManager.start(),
-        5000
-      );
-    }
+if (config.index === getFirstActiveIndex()) {
+  setTimeout(
+    () => raceManager.start(),
+    5000
+  );
+}
   });
 
   // ================== تسجيل الدخول ==================
@@ -853,9 +898,18 @@ function createBot(config) {
 // ================== تشغيل الحسابات بفاصل 4 ثوانٍ ==================
 // =========================================================================
 
-ACCOUNTS.forEach((account, index) => {
+let loginOrder = 0;
+
+ACCOUNTS.forEach((account) => {
+  if (!isAccountActive(account.index)) {
+    console.log(`⏸️ الحساب ${account.name} متوقف.`);
+    return;
+  }
+
   setTimeout(
     () => createBot(account),
-    index * 4000
+    loginOrder * 4000
   );
+
+  loginOrder++;
 });
