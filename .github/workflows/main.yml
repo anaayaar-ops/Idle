@@ -1,4 +1,4 @@
-name: Manual Cycle Bot (5H / 10M)
+name: Manual Cycle Bot - Single Account
 
 on:
   workflow_dispatch:
@@ -26,43 +26,8 @@ jobs:
 
       - name: Start Cycle Bot
         env:
-          U_MAIL_1: ${{ secrets.U_MAIL_1 }}
-          U_PASS_1: ${{ secrets.U_PASS_1 }}
-
-          U_MAIL_2: ${{ secrets.U_MAIL_2 }}
-          U_PASS_2: ${{ secrets.U_PASS_2 }}
-
-          U_MAIL_3: ${{ secrets.U_MAIL_3 }}
-          U_PASS_3: ${{ secrets.U_PASS_3 }}
-
-          U_MAIL_4: ${{ secrets.U_MAIL_4 }}
-          U_PASS_4: ${{ secrets.U_PASS_4 }}
-
-          U_MAIL_5: ${{ secrets.U_MAIL_5 }}
-          U_PASS_5: ${{ secrets.U_PASS_5 }}
-
-          U_MAIL_6: ${{ secrets.U_MAIL_6 }}
-          U_PASS_6: ${{ secrets.U_PASS_6 }}
-
-          U_MAIL_7: ${{ secrets.U_MAIL_7 }}
-          U_PASS_7: ${{ secrets.U_PASS_7 }}
-
-          U_MAIL_8: ${{ secrets.U_MAIL_8 }}
-          U_PASS_8: ${{ secrets.U_PASS_8 }}
-
-          U_MAIL_9: ${{ secrets.U_MAIL_9 }}
-          U_PASS_9: ${{ secrets.U_PASS_9 }}
-
-          U_MAIL_10: ${{ secrets.U_MAIL_10 }}
-          U_PASS_10: ${{ secrets.U_PASS_10 }}
-
-          U_MAIL_11: ${{ secrets.U_MAIL_11 }}
-          U_PASS_11: ${{ secrets.U_PASS_11 }}
-
-          U_MAIL_12: ${{ secrets.U_MAIL_12 }}
-          U_PASS_12: ${{ secrets.U_PASS_12 }}
-    
-
+          U_MAIL: ${{ secrets.U_MAIL }}
+          U_PASS: ${{ secrets.U_PASS }}
         run: |
-          echo "🚀 بدء تشغيل البوت (5H / 10M)"
+          echo "🚀 بدء تشغيل البوت لحساب واحد"
           node app.js
