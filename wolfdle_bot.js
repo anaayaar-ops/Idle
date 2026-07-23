@@ -440,23 +440,17 @@ function scheduleNewGame(reason, delayMs = 5000) {
 }
 
 async function handleWolfdleMessage(message) {
-  // رقم الروم اللي جاية منه الرسالة — بنجرب أكتر من اسم حقل محتمل لأن المكتبات
-  // بتختلف في التسمية (targetGroupId هو الأكثر شيوعًا في wolf.js)
-  const messageRoomId =
-    message.targetGroupId ?? message.groupId ?? message.recipientId ?? message.channelId ?? null;
+  // رقم الروم اللي جاية منه الرسالة (تأكدنا إن targetGroupId هو الحقل الصحيح)
+  const messageRoomId = message.targetGroupId ?? message.groupId ?? null;
 
-  // 🔍 تسجيل تشخيصي مؤقت — بيوري كل رسالة جاية قبل أي فلترة، عشان نتأكد
-  // من اسم الحقل الصحيح لرقم الروم ونتأكد إن الفلتر شغال صح
-  originalLog(
-    `🔍 [DEBUG] event | id=${message.id} | sourceSubscriberId=${message.sourceSubscriberId} | isGroup=${message.isGroup} | roomId=${messageRoomId} | type=${message.type || message.mimeType || '?'} | bodyLen=${(message.body || '').length} | snippet=${(message.body || '').slice(0, 80).replace(/\n/g, ' ')}`
-  );
-  if (messageRoomId === null) {
-    originalLog(`🔍 [DEBUG] لم نلاقي حقل رقم الروم بالأسماء المتوقعة، مفاتيح الرسالة المتاحة: ${Object.keys(message).join(', ')}`);
-  }
-
-  // نتجاهل أي رسالة مش من الروم اللي احنا شغالين فيه (82038178)
+  // نتجاهل أي رسالة مش من روم اللعبة قبل أي معالجة أو تسجيل
   if (!message.isGroup) return;
   if (messageRoomId !== null && Number(messageRoomId) !== ROOM_ID) return;
+
+  // 🔍 تسجيل تشخيصي مؤقت — بيوري بس رسايل روم اللعبة (82038178) دلوقتي
+  originalLog(
+    `🔍 [DEBUG] event | id=${message.id} | sourceSubscriberId=${message.sourceSubscriberId} | roomId=${messageRoomId} | type=${message.type || message.mimeType || '?'} | bodyLen=${(message.body || '').length}`
+  );
 
   if (Number(message.sourceSubscriberId) !== WOLFDLE_BOT_ID) return;
 
@@ -637,4 +631,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-            }
+}
