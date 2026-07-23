@@ -228,6 +228,52 @@ function totalMatchedCells(rows) {
 }
 
 // ==================================================
+// نظام "الراحة الدورية" لمنع السبام: البوت بيلعب 54 دقيقة متواصلة ثم ياخد
+// راحة 6 دقايق (يوقف عن إرسال أي تخمين أو أمر بدء جولة)، وبعدين يكمّل عادي.
+// ده بيتكرر طول مدة تشغيل الجلسة كلها.
+// ==================================================
+const BREAK_ACTIVE_MS = 54 * 60 * 1000; // 54 دقيقة لعب متواصل
+const BREAK_REST_MS = 6 * 60 * 1000;    // 6 دقائق راحة
+
+let isBreakTime = false;
+let gameStartPending = false; // هل فيه أمر "!كلمات" اتأجل بسبب الاستراحة ولازم يتبعت لما تخلص؟
+
+function scheduleNextBreakPhase(isEnteringBreak) {
+  if (isEnteringBreak) {
+    isBreakTime = true;
+    console.log('☕ بداية استراحة 6 دقايق (لمنع السبام) — البوت هيوقف عن اللعب مؤقتًا وهيرجع تلقائيًا بعدها.');
+    setTimeout(() => scheduleNextBreakPhase(false), BREAK_REST_MS);
+  } else {
+    isBreakTime = false;
+    console.log('▶️ خلصت الاستراحة، البوت رجع يلعب تاني.');
+    setTimeout(() => scheduleNextBreakPhase(true), BREAK_ACTIVE_MS);
+    resumeAfterBreak().catch(err => console.log('⚠️ خطأ أثناء استئناف اللعب بعد الاستراحة:', err.message));
+  }
+}
+
+// بيتنده لما الاستراحة تخلص، عشان يكمّل الجولة اللي كانت واقفة أو يبدأ جولة جديدة
+async function resumeAfterBreak() {
+  if (!client || !isBotReady) return;
+
+  if (gameStartPending) {
+    gameStartPending = false;
+    resetGameState();
+    await sendGroupMessage(ROOM_ID, START_COMMAND);
+    await sleep(2000);
+    await sendFirstGuessIfNeeded();
+    return;
+  }
+
+  if (isGameOver) return; // مفيش جولة نشطة محتاجة استئناف
+
+  if (gameRows.length === 0) {
+    await sendFirstGuessIfNeeded();
+  } else {
+    await recheckBoardNow();
+  }
+}
+
+// ==================================================
 // حالة اللعبة
 // ==================================================
 let client = null;
@@ -419,14 +465,10 @@ function pickNextGuess(rows) {
 
 // يبني تخمين "من الصفر" ملتزم بكل القيود المؤكدة لحد دلوقتي، حتى لو الكلمة الناتجة
 // مش موجودة في قاموسنا المحلي (433 كلمة قد ميغطيش كل الكلمات الحقيقية).
-// مثال: لو عرفنا إن الكلمة بتبدأ بـ "ال" وفيها "ر" و"ك" في مكان مجهول، والحرف
-// الخامس لسه غير معروف، الدالة دي بتحط "ر" و"ك" في الخانات الفاضية المسموحة،
-// وتملأ أي خانة لسه فاضية بحرف عالي التكرار لسه ما اتجربش.
 function buildConstraintGuess(state, guessedSet) {
   const { greens, excludedAt, minCount, maxCount, testedLetters } = state;
   const slots = greens.slice(); // null = خانة مجهولة، وإلا الحرف الأخضر المؤكد
 
-  // 1) احسب كام مرة لسه محتاجين نحط كل حرف "لازم يكون موجود" (أصفر/أخضر) في الخانات المجهولة
   const remainingNeeded = {};
   for (const [L, min] of Object.entries(minCount)) {
     const alreadyPlaced = slots.filter(s => s === L).length;
@@ -435,7 +477,6 @@ function buildConstraintGuess(state, guessedSet) {
   }
   const emptySlots = () => slots.map((s, i) => (s === null ? i : -1)).filter(i => i !== -1);
 
-  // رتّب الحروف المطلوبة الأكثر إلحاحًا (المطلوب تكرارها أكتر) الأول
   const neededLetters = Object.entries(remainingNeeded).sort((a, b) => b[1] - a[1]);
   for (const [L, count] of neededLetters) {
     for (let n = 0; n < count; n++) {
@@ -445,7 +486,6 @@ function buildConstraintGuess(state, guessedSet) {
     }
   }
 
-  // 2) املأ أي خانة لسه فاضية بحرف عالي التكرار لسه ما اتجربش، وميكونش مستبعد كليًا
   const fullyExcluded = new Set(
     Object.entries(maxCount).filter(([, max]) => max === 0).map(([L]) => L)
   );
@@ -460,7 +500,7 @@ function buildConstraintGuess(state, guessedSet) {
       .sort((a, b) => {
         const aTested = testedLetters.has(a) ? 1 : 0;
         const bTested = testedLetters.has(b) ? 1 : 0;
-        if (aTested !== bTested) return aTested - bTested; // نفضّل حروف لسه ما اتجربتش
+        if (aTested !== bTested) return aTested - bTested;
         return (LETTER_FREQ[b] ?? 0) - (LETTER_FREQ[a] ?? 0);
       });
     if (options.length === 0) return null;
@@ -479,8 +519,6 @@ function partialMatchScore(word, state) {
   const counts = {};
   for (const L of letters) counts[L] = (counts[L] || 0) + 1;
 
-  // أي مخالفة لقيد مؤكد (حرف أخضر/أصفر لازم يكون موجود، أو حرف رمادي لازم ميكونش موجود
-  // بالعدد ده) بتلغي الكلمة تمامًا — مينفعش نرشحها حتى لو باقي حروفها كويسة.
   for (const [L, min] of Object.entries(state.minCount)) {
     if ((counts[L] || 0) < min) return -Infinity;
   }
@@ -500,7 +538,7 @@ function partialMatchScore(word, state) {
 // إرسال التخمين
 // ==================================================
 async function sendGuess(word) {
-  if (!client || !isBotReady || isGameOver) return;
+  if (!client || !isBotReady || isGameOver || isBreakTime) return;
   isSending = true;
   const delay = Math.floor(Math.random() * (1600 - 900 + 1)) + 900;
   console.log(`✨ هبعت التخمين: [ ${word} ] بعد ${delay}ms`);
@@ -523,7 +561,7 @@ async function sendGuess(word) {
 }
 
 async function recheckBoardNow() {
-  if (isGameOver || isSending || !isBotReady) return;
+  if (isGameOver || isSending || !isBotReady || isBreakTime) return;
   if (gameRows.length === 0) return;
   const lastRow = gameRows[gameRows.length - 1];
   if (isWinningRow(lastRow)) return; // اتعالجت بالفعل في مكانها
@@ -540,7 +578,7 @@ async function sendGroupMessage(roomId, text) {
 // أول تخمين في الجولة: لازم يتبعت لوحده فور ما اللعبة تبدأ (اللوحة بتكون فاضية
 // ومفيش أي رسالة هتخلي الكود "يستنتج" إنه يبعت، فلازم نبعته احنا استباقيًا).
 async function sendFirstGuessIfNeeded() {
-  if (firstGuessSent || isGameOver || isSending || !isBotReady) return;
+  if (firstGuessSent || isGameOver || isSending || !isBotReady || isBreakTime) return;
   firstGuessSent = true;
   const guess = pickNextGuess([]);
   if (guess) await sendGuess(guess);
@@ -555,6 +593,12 @@ function scheduleNewGame(reason, delayMs = 15000) {
   restartTimer = setTimeout(async () => {
     restartTimer = null;
     resetGameState();
+    if (isBreakTime) {
+      // إحنا في وقت الاستراحة دلوقتي — أجّل بدء الجولة الجديدة لحد ما الاستراحة تخلص
+      gameStartPending = true;
+      console.log('☕ هنأجّل بدء الجولة الجديدة لحد ما الاستراحة الحالية تخلص.');
+      return;
+    }
     await sendGroupMessage(ROOM_ID, START_COMMAND);
     await sleep(2000);
     await sendFirstGuessIfNeeded();
@@ -583,7 +627,6 @@ async function handleWolfdleMessage(message) {
   const isBoardMessage = body.includes('wolfdlebot-mp-game');
 
   // 1) رسالة نصية (بداية/نهاية لعبة أو تنبيه)
-  // بنستخدم فلتر تكرار الـ id هنا بس، عشان الرسايل النصية دي بتتبعت مرة واحدة فعلاً
   if (!isBoardMessage || mime.includes('text/plain')) {
     if (processedMessageIds.has(message.id)) return;
     processedMessageIds.add(message.id);
@@ -605,9 +648,6 @@ async function handleWolfdleMessage(message) {
   }
 
   // 2) رسالة HTML فيها لوحة اللعبة
-  // ملحوظة مهمة: WOLFdle بيعدّل نفس الرسالة (نفس الـ id) كل ما اللوحة تتحدث،
-  // فمينفعش نفلتر هنا بالـ id زي الرسايل النصية — بنعتمد بدل كده على عدد
-  // الصفوف الفعلي (rows.length مقابل gameRows.length) عشان نمنع إعادة المعالجة.
   const rows = parseBoard(body);
   if (rows.length === 0) {
     // اللوحة لسه فاضية (اللعبة بدأت للتو) — ده وقت إرسال أول تخمين لوحدنا
@@ -693,6 +733,11 @@ async function loginWithFreshClient(reason = 'التشغيل الأول') {
     console.log('✅ تم تسجيل الدخول! البوت متصل وجاهز للعب WOLFdle.');
     isBotReady = true;
     resetGameState();
+    if (isBreakTime) {
+      gameStartPending = true;
+      console.log('☕ إحنا في وقت استراحة — هنبدأ الجولة لما الاستراحة تخلص.');
+      return;
+    }
     await sleep(2000);
     await sendGroupMessage(ROOM_ID, START_COMMAND);
     await sleep(2000);
@@ -742,14 +787,17 @@ async function loginWithFreshClient(reason = 'التشغيل الأول') {
 // بدء التشغيل
 // ==================================================
 console.log(`🎯 تسلسل تجربة الحروف: ${FIXED_PROBES.join(' ، ')}`);
+console.log(`⏱️ دورة اللعب: ${BREAK_ACTIVE_MS / 60000} دقيقة لعب ثم ${BREAK_REST_MS / 60000} دقايق راحة، بشكل متكرر.`);
 
 loginWithFreshClient();
 
+// ابدأ دورة اللعب/الراحة من لحظة تشغيل السكربت (54 دقيقة لعب، بعدين أول استراحة)
+setTimeout(() => scheduleNextBreakPhase(true), BREAK_ACTIVE_MS);
+
 // ==================================================
 // إيقاف تلقائي بلطف قبل ما GitHub Actions يقفل الـ job إجباريًا
-// (الـ job الواحدة أقصى مدة ليها 6 ساعات على GitHub Actions)
 // ==================================================
-const MAX_RUNTIME_MS = Number(process.env.BOT_MAX_RUNTIME_MS) || 4 * 60 * 60 * 1000; // 4 ساعات افتراضيًا
+const MAX_RUNTIME_MS = Number(process.env.BOT_MAX_RUNTIME_MS) || 5 * 60 * 60 * 1000; // 5 ساعات افتراضيًا
 
 if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
   setTimeout(async () => {
@@ -759,4 +807,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-}
+         }
