@@ -3,6 +3,7 @@ import wolfjs from 'wolf.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
 
 process.env.SUPPRESS_NO_CONFIG_WARNING = 'true';
 
@@ -107,13 +108,73 @@ function saveLearnedWord(rawWord) {
   LEARNED_WORDS.add(word);
   try {
     fs.writeFileSync(LEARNED_WORDS_PATH, JSON.stringify([...LEARNED_WORDS], null, 2), 'utf8');
-    console.log(`💾 اتحفظت كلمة جديدة في ذاكرتنا: ${word} (إجمالي الكلمات المتعلمة: ${LEARNED_WORDS.size})`);
+    console.log(`💾 اتحفظت كلمة جديدة محليًا: ${word} (إجمالي الكلمات المتعلمة: ${LEARNED_WORDS.size})`);
   } catch (err) {
-    console.error('❌ فشل حفظ الكلمة المتعلمة:', err.message);
+    console.error('❌ فشل حفظ الكلمة المتعلمة محليًا:', err.message);
+    return;
+  }
+  // ارفع التحديث فورًا لريبو GitHub (لو شغالين جوه GitHub Actions)
+  // عشان الكلمة متتفقدش أبدًا حتى لو الـ job اتقفل فجأة قبل نهاية الجلسة
+  commitLearnedWordsToRepo().catch(err => console.log('⚠️ فشل رفع الكلمة للريبو:', err.message));
+}
+
+// ==================================================
+// رفع ملف الكلمات المتعلمة للريبو مباشرة (commit + push) فور تعلّم كلمة جديدة،
+// بدل ما ننتظر لحد ما الجلسة تخلص. بيشتغل بس جوه GitHub Actions.
+// ==================================================
+function runGitCommand(cmd) {
+  return new Promise((resolve, reject) => {
+    exec(cmd, { cwd: __dirname }, (err, stdout, stderr) => {
+      if (err) reject(new Error(stderr || err.message)); else resolve(stdout);
+    });
+  });
+}
+
+function hasStagedGitChanges() {
+  return new Promise((resolve) => {
+    exec('git diff --cached --quiet', { cwd: __dirname }, (err) => {
+      resolve(!!err); // git diff --quiet بيرجع كود خروج 1 لو فيه تغييرات
+    });
+  });
+}
+
+function setupGitIdentityIfNeeded() {
+  if (process.env.GITHUB_ACTIONS !== 'true') return;
+  exec(
+    'git config user.name "github-actions[bot]" && git config user.email "github-actions[bot]@users.noreply.github.com"',
+    { cwd: __dirname },
+    () => {}
+  );
+}
+
+let gitCommitBusy = false;
+let gitCommitPending = false;
+
+async function commitLearnedWordsToRepo() {
+  if (process.env.GITHUB_ACTIONS !== 'true') return; // بس جوه GitHub Actions فيه صلاحية push
+  if (gitCommitBusy) { gitCommitPending = true; return; }
+  gitCommitBusy = true;
+  try {
+    await runGitCommand('git add learned_words.json');
+    const changed = await hasStagedGitChanges();
+    if (changed) {
+      await runGitCommand('git commit -m "chore: تحديث الكلمات المتعلمة [skip ci]"');
+      await runGitCommand('git push');
+      console.log('☁️ اتحفظت الكلمة الجديدة في الريبو مباشرة (commit + push).');
+    }
+  } catch (err) {
+    console.log('⚠️ فشل رفع الكلمات المتعلمة للريبو:', err.message);
+  } finally {
+    gitCommitBusy = false;
+    if (gitCommitPending) {
+      gitCommitPending = false;
+      commitLearnedWordsToRepo();
+    }
   }
 }
 
 loadLearnedWords();
+setupGitIdentityIfNeeded();
 
 // تقدير تكراري تقريبي لحروف اللغة العربية (لأولوية الاستكشاف والاختيار)
 const LETTER_FREQ = {
@@ -538,3 +599,19 @@ async function loginWithFreshClient(reason = 'التشغيل الأول') {
 console.log(`🎯 تسلسل تجربة الحروف: ${FIXED_PROBES.join(' ، ')}`);
 
 loginWithFreshClient();
+
+// ==================================================
+// إيقاف تلقائي بلطف قبل ما GitHub Actions يقفل الـ job إجباريًا
+// (الـ job الواحدة أقصى مدة ليها 6 ساعات على GitHub Actions)
+// ==================================================
+const MAX_RUNTIME_MS = Number(process.env.BOT_MAX_RUNTIME_MS) || 4 * 60 * 60 * 1000; // 4 ساعات افتراضيًا
+
+if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
+  setTimeout(async () => {
+    console.log('⏰ وصلنا للحد الأقصى للتشغيل في هذه الجلسة، هنقفل بهدوء عشان الـ workflow يقدر يحفظ التقدم ويشغّل نسخة جديدة.');
+    try { if (client) client.removeAllListeners(); } catch {}
+    try { if (client && client.disconnect) await client.disconnect(); } catch {}
+    process.exit(0);
+  }, MAX_RUNTIME_MS);
+  console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
+}
