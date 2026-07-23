@@ -440,14 +440,25 @@ function scheduleNewGame(reason, delayMs = 5000) {
 }
 
 async function handleWolfdleMessage(message) {
-  // 🔍 تسجيل تشخيصي مؤقت — بيوري كل رسالة جاية من WOLFdle قبل أي فلترة
-  // (بيتجاهل فلاتر الإخفاء عشان نشوف اللي بيحصل فعليًا في الخلفية)
+  // رقم الروم اللي جاية منه الرسالة — بنجرب أكتر من اسم حقل محتمل لأن المكتبات
+  // بتختلف في التسمية (targetGroupId هو الأكثر شيوعًا في wolf.js)
+  const messageRoomId =
+    message.targetGroupId ?? message.groupId ?? message.recipientId ?? message.channelId ?? null;
+
+  // 🔍 تسجيل تشخيصي مؤقت — بيوري كل رسالة جاية قبل أي فلترة، عشان نتأكد
+  // من اسم الحقل الصحيح لرقم الروم ونتأكد إن الفلتر شغال صح
   originalLog(
-    `🔍 [DEBUG] event | id=${message.id} | sourceSubscriberId=${message.sourceSubscriberId} | isGroup=${message.isGroup} | type=${message.type || message.mimeType || '?'} | bodyLen=${(message.body || '').length} | snippet=${(message.body || '').slice(0, 80).replace(/\n/g, ' ')}`
+    `🔍 [DEBUG] event | id=${message.id} | sourceSubscriberId=${message.sourceSubscriberId} | isGroup=${message.isGroup} | roomId=${messageRoomId} | type=${message.type || message.mimeType || '?'} | bodyLen=${(message.body || '').length} | snippet=${(message.body || '').slice(0, 80).replace(/\n/g, ' ')}`
   );
+  if (messageRoomId === null) {
+    originalLog(`🔍 [DEBUG] لم نلاقي حقل رقم الروم بالأسماء المتوقعة، مفاتيح الرسالة المتاحة: ${Object.keys(message).join(', ')}`);
+  }
+
+  // نتجاهل أي رسالة مش من الروم اللي احنا شغالين فيه (82038178)
+  if (!message.isGroup) return;
+  if (messageRoomId !== null && Number(messageRoomId) !== ROOM_ID) return;
 
   if (Number(message.sourceSubscriberId) !== WOLFDLE_BOT_ID) return;
-  if (!message.isGroup) return;
 
   const mime = message.type || message.mimeType || '';
   const body = message.body || '';
@@ -626,4 +637,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-  }
+            }
