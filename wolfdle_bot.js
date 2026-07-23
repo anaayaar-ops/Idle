@@ -442,17 +442,20 @@ function scheduleNewGame(reason, delayMs = 5000) {
 async function handleWolfdleMessage(message) {
   if (Number(message.sourceSubscriberId) !== WOLFDLE_BOT_ID) return;
   if (!message.isGroup) return;
-  if (processedMessageIds.has(message.id)) return;
-  processedMessageIds.add(message.id);
-  if (processedMessageIds.size > 500) {
-    processedMessageIds = new Set([...processedMessageIds].slice(-250));
-  }
 
   const mime = message.type || message.mimeType || '';
   const body = message.body || '';
+  const isBoardMessage = body.includes('wolfdlebot-mp-game');
 
   // 1) رسالة نصية (بداية/نهاية لعبة أو تنبيه)
-  if (mime.includes('text/plain') || !body.includes('wolfdlebot-mp-game')) {
+  // بنستخدم فلتر تكرار الـ id هنا بس، عشان الرسايل النصية دي بتتبعت مرة واحدة فعلاً
+  if (!isBoardMessage || mime.includes('text/plain')) {
+    if (processedMessageIds.has(message.id)) return;
+    processedMessageIds.add(message.id);
+    if (processedMessageIds.size > 500) {
+      processedMessageIds = new Set([...processedMessageIds].slice(-250));
+    }
+
     const text = body;
     if (text.includes('انتهت اللعبة') || text.includes('فشلت') || text.includes('أحسنت') || text.includes('فزت') || text.includes('مبروك')) {
       isGameOver = true;
@@ -467,6 +470,9 @@ async function handleWolfdleMessage(message) {
   }
 
   // 2) رسالة HTML فيها لوحة اللعبة
+  // ملحوظة مهمة: WOLFdle بيعدّل نفس الرسالة (نفس الـ id) كل ما اللوحة تتحدث،
+  // فمينفعش نفلتر هنا بالـ id زي الرسايل النصية — بنعتمد بدل كده على عدد
+  // الصفوف الفعلي (rows.length مقابل gameRows.length) عشان نمنع إعادة المعالجة.
   const rows = parseBoard(body);
   if (rows.length === 0) {
     // اللوحة لسه فاضية (اللعبة بدأت للتو) — ده وقت إرسال أول تخمين لوحدنا
@@ -614,4 +620,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-}
+                      }
