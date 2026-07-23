@@ -440,6 +440,12 @@ function scheduleNewGame(reason, delayMs = 5000) {
 }
 
 async function handleWolfdleMessage(message) {
+  // 🔍 تسجيل تشخيصي مؤقت — بيوري كل رسالة جاية من WOLFdle قبل أي فلترة
+  // (بيتجاهل فلاتر الإخفاء عشان نشوف اللي بيحصل فعليًا في الخلفية)
+  originalLog(
+    `🔍 [DEBUG] event | id=${message.id} | sourceSubscriberId=${message.sourceSubscriberId} | isGroup=${message.isGroup} | type=${message.type || message.mimeType || '?'} | bodyLen=${(message.body || '').length} | snippet=${(message.body || '').slice(0, 80).replace(/\n/g, ' ')}`
+  );
+
   if (Number(message.sourceSubscriberId) !== WOLFDLE_BOT_ID) return;
   if (!message.isGroup) return;
 
@@ -620,4 +626,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-                      }
+  }
