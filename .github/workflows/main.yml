@@ -1,18 +1,18 @@
 name: Run WOLFdle Bot
 
-# تشغيل تلقائي كل 4 ساعات، البوت بيوقف نفسه بهدوء عند هذا الحد ويبدأ run جديدة
+# تشغيل تلقائي كل 4 ساعات — البوت الجديد بيقفل القديم فورًا (مش بينتظره)
 # + إمكانية تشغيل يدوي من تبويب Actions للاختبار
 on:
   schedule:
     - cron: '0 */4 * * *'
   workflow_dispatch: {}
 
-# يمنع تشغيل نسختين من البوت في نفس الوقت.
-# لو job جديدة اتشغلت (بسبب الـ cron) والقديمة لسه شغالة،
-# الجديدة هتستنى في الطابور وتشتغل فور ما القديمة تخلص — يعني تغطية شبه متواصلة.
+# لما job جديدة تتشغل (بسبب الـ cron كل 4 ساعات)، أي job قديمة لسه شغالة
+# هتتلغي (تتقفل) فورًا عشان تبدأ الجديدة بدل ما تستناها. ده بيحقق المطلوب:
+# "كل 4 ساعات يعيد تشغيل نفسه ويغلق النسخة السابقة".
 concurrency:
   group: wolfdle-bot
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: write   # لازم عشان يقدر يعمل commit/push لملف learned_words.json
@@ -20,7 +20,7 @@ permissions:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 250   # أكبر شوية من 4 ساعات (240) كهامش أمان
+    timeout-minutes: 320   # هامش أمان فوق الـ 5 ساعات (300 دقيقة) اللي البوت هيشتغلها كحد أقصى
 
     steps:
       - name: Checkout repo
@@ -34,11 +34,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Start bot (يشتغل حتى ~5س45د ثم يوقف نفسه بهدوء)
+      - name: Start bot (يشتغل حتى 5 ساعات كحد أقصى ثم يوقف نفسه بهدوء)
         env:
           U_MAIL: ${{ secrets.U_MAIL }}
           U_PASS: ${{ secrets.U_PASS }}
-          BOT_MAX_RUNTIME_MS: 14100000   # 3 ساعات و55 دقيقة (هامش أمان 5 دقايق قبل الـ 4 ساعات بالظبط)
+          BOT_MAX_RUNTIME_MS: 18000000   # 5 ساعات بالظبط (حد أقصى أمان — عمليًا هيتقفل قبلها بسبب الـ cron الجديد كل 4 ساعات)
         run: node wolfdle_bot.js
 
       - name: حفظ الكلمات المتعلمة في الريبو
