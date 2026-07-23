@@ -1,33 +1,55 @@
-name: XO Bot
+name: Run WOLFdle Bot
 
+# تشغيل تلقائي كل 4 ساعات، البوت بيوقف نفسه بهدوء عند هذا الحد ويبدأ run جديدة
+# + إمكانية تشغيل يدوي من تبويب Actions للاختبار
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch: {}
 
+# يمنع تشغيل نسختين من البوت في نفس الوقت.
+# لو job جديدة اتشغلت (بسبب الـ cron) والقديمة لسه شغالة،
+# الجديدة هتستنى في الطابور وتشتغل فور ما القديمة تخلص — يعني تغطية شبه متواصلة.
 concurrency:
-  group: wolf-cycle-bot
-  cancel-in-progress: true
+  group: wolfdle-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # لازم عشان يقدر يعمل commit/push لملف learned_words.json
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 600
+    timeout-minutes: 250   # أكبر شوية من 4 ساعات (240) كهامش أمان
 
     steps:
-      - name: Checkout Code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
 
-      - name: Install Dependencies
-        run: npm install
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Start Cycle Bot
+      - name: Start bot (يشتغل حتى ~5س45د ثم يوقف نفسه بهدوء)
         env:
           U_MAIL: ${{ secrets.U_MAIL }}
           U_PASS: ${{ secrets.U_PASS }}
+          BOT_MAX_RUNTIME_MS: 14100000   # 3 ساعات و55 دقيقة (هامش أمان 5 دقايق قبل الـ 4 ساعات بالظبط)
+        run: node wolfdle_bot.js
+
+      - name: حفظ الكلمات المتعلمة في الريبو
+        if: always()
         run: |
-          echo "🚀 بدء تشغيل البوت لحساب واحد"
-          node app.js
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add learned_words.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: تحديث الكلمات المتعلمة [skip ci]"
+            git push
+          else
+            echo "لا يوجد تغيير في الكلمات المتعلمة."
+          fi
