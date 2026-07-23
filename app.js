@@ -443,7 +443,7 @@ async function loginWithFreshClient(reason = 'التشغيل الأول') {
   });
 
   try {
-    const loginPromise = client.login(process.env.U_MAIL_1, process.env.U_PASS_1);
+    const loginPromise = client.login(process.env.U_MAIL, process.env.U_PASS);
     if (loginPromise && typeof loginPromise.then === 'function') {
       await loginPromise;
     }
