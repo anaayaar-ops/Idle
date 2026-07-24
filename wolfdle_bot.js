@@ -74,7 +74,9 @@ try {
 }
 
 // ==================================================
-// قاعدة بيانات "الكلمات المتعلّمة"
+// قاعدة بيانات "الكلمات المتعلّمة" (الكلمات الصحيحة اللي عرفناها من جولات سابقة)
+// بتتخزن على القرص وبترجع تتحمل تاني كل ما البوت يشتغل، عشان يبني معرفة تراكمية
+// بدل ما يعتمد بس على القاموس الجاهز.
 // ==================================================
 const LEARNED_WORDS_PATH = path.join(__dirname, 'learned_words.json');
 let LEARNED_WORDS = new Set();
@@ -83,7 +85,7 @@ function normalizeWord(w) {
   return String(w || '')
     .replace(/ة/g, 'ه')
     .replace(/[أإآ]/g, 'ا')
-    .replace(/[\u0610-\u061A\u064B-\u065F\u0670]/g, '')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670]/g, '') // إزالة التشكيل
     .trim();
 }
 
@@ -111,9 +113,15 @@ function saveLearnedWord(rawWord) {
     console.error('❌ فشل حفظ الكلمة المتعلمة محليًا:', err.message);
     return;
   }
+  // ارفع التحديث فورًا لريبو GitHub (لو شغالين جوه GitHub Actions)
+  // عشان الكلمة متتفقدش أبدًا حتى لو الـ job اتقفل فجأة قبل نهاية الجلسة
   commitLearnedWordsToRepo().catch(err => console.log('⚠️ فشل رفع الكلمة للريبو:', err.message));
 }
 
+// ==================================================
+// رفع ملف الكلمات المتعلمة للريبو مباشرة (commit + push) فور تعلّم كلمة جديدة،
+// بدل ما ننتظر لحد ما الجلسة تخلص. بيشتغل بس جوه GitHub Actions.
+// ==================================================
 function runGitCommand(cmd) {
   return new Promise((resolve, reject) => {
     exec(cmd, { cwd: __dirname }, (err, stdout, stderr) => {
@@ -125,7 +133,7 @@ function runGitCommand(cmd) {
 function hasStagedGitChanges() {
   return new Promise((resolve) => {
     exec('git diff --cached --quiet', { cwd: __dirname }, (err) => {
-      resolve(!!err);
+      resolve(!!err); // git diff --quiet بيرجع كود خروج 1 لو فيه تغييرات
     });
   });
 }
@@ -143,7 +151,7 @@ let gitCommitBusy = false;
 let gitCommitPending = false;
 
 async function commitLearnedWordsToRepo() {
-  if (process.env.GITHUB_ACTIONS !== 'true') return;
+  if (process.env.GITHUB_ACTIONS !== 'true') return; // بس جوه GitHub Actions فيه صلاحية push
   if (gitCommitBusy) { gitCommitPending = true; return; }
   gitCommitBusy = true;
   try {
@@ -168,6 +176,7 @@ async function commitLearnedWordsToRepo() {
 loadLearnedWords();
 setupGitIdentityIfNeeded();
 
+// تقدير تكراري تقريبي لحروف اللغة العربية (لأولوية الاستكشاف والاختيار)
 const LETTER_FREQ = {
   'ا': 1.00, 'ل': 0.95, 'ي': 0.85, 'م': 0.80, 'و': 0.78, 'ن': 0.75,
   'ر': 0.70, 'ت': 0.68, 'ب': 0.60, 'ه': 0.58, 'س': 0.55, 'ع': 0.50,
@@ -181,14 +190,22 @@ function wordScore(word, testedLetters) {
   let score = 0;
   for (const L of distinct) {
     const freq = LETTER_FREQ[L] ?? 0.1;
-    score += testedLetters.has(L) ? freq * 0.15 : freq;
+    score += testedLetters.has(L) ? freq * 0.15 : freq; // نفضّل حروف لسه ما اتجربتش
   }
-  score += distinct.size * 0.3;
+  score += distinct.size * 0.3; // نكافئ تنوع الحروف (تقليل التكرار)
   return score;
 }
 
+// تسلسل ثابت لتجربة الحروف العشوائية (5 تخمينات تغطي 25 حرف مختلف بدون تكرار)
 const FIXED_PROBES = ['المنت', 'وربيس', 'عغفقه', 'دجحخك', 'ظطصضز'];
 
+// ==================================================
+// قائمة "حرق" الجولة: لما مفيش أي تخمين منطقي ممكن نبنيه (5/5 حروف معروفة
+// بس مفيش كلمة تطابق القيود، أو تعارض في القيود نفسها)، بدل ما نكرر نفس
+// الكلمة الاحتياطية "ابجده" أكتر من مرة (ممكن اللعبة ترفضها كتكرار وتضيع
+// محاولة من غير فايدة)، نبعت كلمات بسيطة مختلفة (حرف واحد مكرر 5 مرات)
+// لحد ما الصف يوصل 6 والجولة تنتهي وتظهرلنا الكلمة الصحيحة.
+// ==================================================
 const BURN_LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي'];
 
 function pickBurnGuess(guessedSet) {
@@ -199,6 +216,7 @@ function pickBurnGuess(guessedSet) {
   return null;
 }
 
+// إجمالي الخانات "الملوّنة" (أخضر + أصفر) في كل الصفوف لحد دلوقتي
 function totalMatchedCells(rows) {
   let total = 0;
   for (const row of rows) {
@@ -210,13 +228,15 @@ function totalMatchedCells(rows) {
 }
 
 // ==================================================
-// نظام الراحة الدورية
+// نظام "الراحة الدورية" لمنع السبام: البوت بيلعب 54 دقيقة متواصلة ثم ياخد
+// راحة 6 دقايق (يوقف عن إرسال أي تخمين أو أمر بدء جولة)، وبعدين يكمّل عادي.
+// ده بيتكرر طول مدة تشغيل الجلسة كلها.
 // ==================================================
-const BREAK_ACTIVE_MS = 50 * 60 * 1000;
-const BREAK_REST_MS = 10 * 60 * 1000;
+const BREAK_ACTIVE_MS = 50 * 60 * 1000; // 50 دقيقة لعب متواصل
+const BREAK_REST_MS = 10 * 60 * 1000;   // 10 دقائق راحة
 
 let isBreakTime = false;
-let gameStartPending = false;
+let gameStartPending = false; // هل فيه أمر "!كلمات" اتأجل بسبب الاستراحة ولازم يتبعت لما تخلص؟
 
 function scheduleNextBreakPhase(isEnteringBreak) {
   if (isEnteringBreak) {
@@ -231,6 +251,7 @@ function scheduleNextBreakPhase(isEnteringBreak) {
   }
 }
 
+// بيتنده لما الاستراحة تخلص، عشان يكمّل الجولة اللي كانت واقفة أو يبدأ جولة جديدة
 async function resumeAfterBreak() {
   if (!client || !isBotReady) return;
 
@@ -243,7 +264,7 @@ async function resumeAfterBreak() {
     return;
   }
 
-  if (isGameOver) return;
+  if (isGameOver) return; // مفيش جولة نشطة محتاجة استئناف
 
   if (gameRows.length === 0) {
     await sendFirstGuessIfNeeded();
@@ -258,12 +279,12 @@ async function resumeAfterBreak() {
 let client = null;
 let isBotReady = false;
 
-let gameRows = [];
+let gameRows = [];          // كل صف: [{letter, status}, ...] بترتيب التخمين
 let processedMessageIds = new Set();
 let isGameOver = false;
 let isSending = false;
-let pendingRecheck = false;
-let firstGuessSent = false;
+let pendingRecheck = false; // هل وصل تحديث للوحة أثناء انشغالنا بالإرسال ولازم نعيد فحصه؟
+let firstGuessSent = false; // هل بعتنا أول تخمين في الجولة الحالية؟
 let restartTimer = null;
 
 function resetGameState() {
@@ -275,6 +296,9 @@ function resetGameState() {
   if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
 }
 
+// ==================================================
+// تحليل HTML اللعبة (استخراج الصفوف والحالات)
+// ==================================================
 function parseBoard(html) {
   const itemRegex = /<div class="wolfdlebot-mp-game__content__container__item ([\w-]+)"[^>]*>([^<]*)<\/div>/g;
   const cells = [];
@@ -289,7 +313,7 @@ function parseBoard(html) {
   for (let i = 0; i < cells.length; i += columns) {
     const rowCells = cells.slice(i, i + columns);
     if (rowCells.length < columns) continue;
-    if (rowCells.some(c => c.status === 'border-only')) continue;
+    if (rowCells.some(c => c.status === 'border-only')) continue; // صف لسه فاضي
     rows.push(rowCells);
   }
   return rows;
@@ -299,6 +323,9 @@ function isWinningRow(row) {
   return row.length === 5 && row.every(c => c.status === 'correct');
 }
 
+// ==================================================
+// محرك التحليل والاستنتاج (منطق Wordle)
+// ==================================================
 function analyzeRows(rows) {
   const greens = Array(5).fill(null);
   const excludedAt = Array.from({ length: 5 }, () => new Set());
@@ -360,84 +387,91 @@ function wordMatchesConstraints(word, state) {
   return true;
 }
 
-const MIN_MATCHED_CELLS_TO_SOLVE = 3;
-
 // ==================================================
-// محاكاة نتائج Wordle للتمييز الذكي بين الاحتمالات (Minimax الصارم)
+// محاكاة رد اللعبة (نفس منطق Wordle القياسي مع تكرار الحروف):
+// بتاخد تخمين وكلمة "افتراضية" وتحسب إيه هيكون رد اللعبة عليها
+// (correct / present / absent) لكل خانة. دي أساس منطق التمييز تحت.
 // ==================================================
-function simulateWordleFeedback(guess, target) {
-  const gLetters = [...guess];
-  const tLetters = [...target];
-  const result = Array(5).fill('invalid');
-  const tCounts = {};
-
-  for (const l of tLetters) tCounts[l] = (tCounts[l] || 0) + 1;
+function simulateFeedback(guess, answer) {
+  const guessLetters = [...guess];
+  const answerLetters = [...answer];
+  const result = Array(5).fill('absent');
+  const answerUsed = Array(5).fill(false);
 
   for (let i = 0; i < 5; i++) {
-    if (gLetters[i] === tLetters[i]) {
+    if (guessLetters[i] === answerLetters[i]) {
       result[i] = 'correct';
-      tCounts[gLetters[i]]--;
+      answerUsed[i] = true;
     }
   }
-
   for (let i = 0; i < 5; i++) {
     if (result[i] === 'correct') continue;
-    const l = gLetters[i];
-    if (tCounts[l] && tCounts[l] > 0) {
-      result[i] = 'incorrect';
-      tCounts[l]--;
+    const idx = answerLetters.findIndex((L, j) => L === guessLetters[i] && !answerUsed[j]);
+    if (idx !== -1) {
+      result[i] = 'present';
+      answerUsed[idx] = true;
     }
   }
-  return result;
+  return result.join('|');
 }
 
-function feedbackSignature(feedback) {
-  return feedback.join(',');
-}
+// ==================================================
+// اختيار "تخمين تمييزي" (discriminating guess): لما يكون فيه أكتر من كلمة
+// محتملة تطابق القيود الحالية، بدل ما نراهن بالعمى على واحدة ونخسر لو غلط،
+// بندوّر بين نفس الاحتمالات على الكلمة اللي لو جرّبناها هتقسّم باقي
+// الاحتمالات لأكبر عدد مجموعات ممكنة (يعني هتديّنا أكبر قدر من المعلومات
+// الجديدة أيًا كان رد اللعبة عليها) وفي نفس الوقت تقلل "أسوأ سيناريو"
+// (أكبر مجموعة ممكن تفضل بعدها). ده بالظبط معنى "نجرب حرف من كل احتمال".
+// ==================================================
+function chooseDiscriminatingGuess(candidates) {
+  if (candidates.length <= 1) return null;
 
-function findBestDisambiguationGuess(candidates, dictionary, state, guessedSet) {
-  if (candidates.length === 1) return candidates[0];
+  let best = null;
+  let bestWorstCase = Infinity;
+  let bestGroupCount = -Infinity;
 
-  const attemptsLeft = 6 - (state.guessedWords.length || 0);
-  
-  // ✅ التعديل الحاسم هنا: منع خيار الكلمات المرشحة تماماً إذا كان عددها أكبر من أو يساوي المحاولات المتبقية
-  // أو إذا كنا في آخر محاولتين وكان هناك أكثر من احتمال لتجنب التخمين العشوائي الخاطئ
-  const mustSplit = candidates.length >= attemptsLeft || attemptsLeft <= 2;
-
-  let bestWord = null;
-  let minMaxRemaining = Infinity;
-  let bestScore = -Infinity;
-
-  for (const guessWord of dictionary) {
-    if (guessedSet.has(guessWord)) continue;
-
-    const isCandidate = candidates.includes(guessWord);
-    if (mustSplit && isCandidate) continue; // حظر تام لاختيار المرشح المباشر لإجبار البوت على جلب كلمة فاصلة
-
-    const outcomeCounts = {};
-    for (const target of candidates) {
-      const feedback = simulateWordleFeedback(guessWord, target);
-      const sig = feedbackSignature(feedback);
-      outcomeCounts[sig] = (outcomeCounts[sig] || 0) + 1;
+  for (const guess of candidates) {
+    const groups = {};
+    for (const answer of candidates) {
+      const pattern = simulateFeedback(guess, answer);
+      groups[pattern] = (groups[pattern] || 0) + 1;
     }
+    const groupValues = Object.values(groups);
+    const worstCase = Math.max(...groupValues);   // أسوأ حالة: أكبر مجموعة ممكن تفضل لو الرد جه بالشكل ده
+    const groupCount = groupValues.length;        // عدد الاحتمالات المختلفة اللي التخمين ده بيميز بينها
 
-    const maxRemaining = Math.max(...Object.values(outcomeCounts));
-    const score = wordScore(guessWord, state.testedLetters);
-
-    if (maxRemaining < minMaxRemaining || (maxRemaining === minMaxRemaining && score > bestScore)) {
-      minMaxRemaining = maxRemaining;
-      bestScore = score;
-      bestWord = guessWord;
+    if (worstCase < bestWorstCase || (worstCase === bestWorstCase && groupCount > bestGroupCount)) {
+      bestWorstCase = worstCase;
+      bestGroupCount = groupCount;
+      best = guess;
     }
   }
+  return best;
+}
 
-  // إذا لم يجد كلمة فاصلة تطابق الشرط بسبب ضيق القاموس، نختار الكلمة الأكثر تنوعاً في الحروف من القاموس عموماً
-  if (!bestWord) {
+// يختار أفضل تخمين من مجموعة احتمالات (سواء كانت كلمات متعلمة أو كلمات قاموس):
+// لو احتمال واحد بس أو آخر محاولة متبقية -> يجزم عليه مباشرة.
+// لو أكتر من احتمال ولسه فيه وقت -> يستخدم التخمين التمييزي عشان يضيّق
+// الاحتمالات بدل ما يجرب عشوائي ويخاطر بالخسارة.
+function pickBestFromCandidates(candidates, testedLetters, attemptsLeft) {
+  if (candidates.length === 1 || attemptsLeft <= 1) {
     return candidates[0];
   }
 
-  return bestWord;
+  const discriminator = chooseDiscriminatingGuess(candidates);
+  if (discriminator) return discriminator;
+
+  let best = candidates[0], bestScore = -Infinity;
+  for (const w of candidates) {
+    const s = wordScore(w, testedLetters);
+    if (s > bestScore) { bestScore = s; best = w; }
+  }
+  return best;
 }
+
+// عدد الخانات "الملوّنة" (أخضر/أصفر) اللي لو وصلنالها نوقف تجربة الحروف
+// ونبدأ نبحث عن الإجابة الفعلية (من الكلمات المتعلمة أولاً ثم القاموس).
+const MIN_MATCHED_CELLS_TO_SOLVE = 3;
 
 function pickNextGuess(rows) {
   const matched = totalMatchedCells(rows);
@@ -449,15 +483,22 @@ function pickNextGuess(rows) {
     return nextProbe;
   }
 
+  // إما لقينا 5 خانات ملوّنة (كل حروف الكلمة معروفة)، أو خلّصنا الـ5 تخمينات الجاهزة
   const state = analyzeRows(rows);
   const guessedSet = new Set(state.guessedWords);
+  const attemptsLeft = 6 - rows.length;
 
+  // أولوية قصوى: كلمات عرفنا قبل كده إنها كانت الحل الصحيح في جولات سابقة وبتطابق القيود الحالية
   const learnedCandidates = [...LEARNED_WORDS].filter(w =>
     !guessedSet.has(w) && wordMatchesConstraints(w, state)
   );
   if (learnedCandidates.length > 0) {
-    const pick = learnedCandidates[0];
-    console.log(`🧠 لقينا ${learnedCandidates.length} كلمة من ذاكرتنا بتطابق القيود، هنجرب: ${pick}`);
+    const pick = pickBestFromCandidates(learnedCandidates, state.testedLetters, attemptsLeft);
+    if (learnedCandidates.length > 1) {
+      console.log(`🧠🎯 لقينا ${learnedCandidates.length} كلمة من ذاكرتنا بتطابق القيود، هجرب كلمة تميّز بينهم: ${pick}`);
+    } else {
+      console.log(`🧠 لقينا ${learnedCandidates.length} كلمة من ذاكرتنا بتطابق القيود، هنجرب: ${pick}`);
+    }
     return pick;
   }
 
@@ -465,20 +506,23 @@ function pickNextGuess(rows) {
     !guessedSet.has(w) && wordMatchesConstraints(w, state)
   );
 
-  const attemptsLeft = 6 - rows.length;
-
   if (candidates.length === 0) {
     console.log(`⚠️ لا توجد كلمة في القاموس تطابق القيود الحالية (وجدنا ${matched}/5 حروف). هدوّر على أقرب حل ممكن.`);
     const scored = DICTIONARY
       .filter(w => !guessedSet.has(w))
       .map(w => ({ w, s: partialMatchScore(w, state) }))
-      .filter(x => x.s > -Infinity)
+      .filter(x => x.s > -Infinity) // استبعد أي كلمة بتخالف قيد مؤكد (حرف لازم يكون موجود/غير موجود)
       .sort((a, b) => b.s - a.s);
     if (scored.length > 0) {
       console.log(`🧩 مفيش كلمة كاملة الشروط، بس دي أقرب كلمة منطقية من القاموس: ${scored[0].w}`);
       return scored[0].w;
     }
 
+    // القاموس (433 كلمة) ناقص الكلمة الصحيحة على الأرجح. بدل ما نستسلم بتخمين عشوائي،
+    // نبني إحنا كلمة بأيدينا تحترم كل القيود المؤكدة: نثبّت الحروف الخضراء، نحط الحروف
+    // الصفراء في خانات فاضية ميتستبعدوش منها، ونملأ أي خانة لسه مجهولة بحرف عالي التكرار
+    // لسه ما اتجربش (عشان لو الكلمة اتقبلت من اللعبة تجيب معلومة جديدة، ولو اترفضت
+    // منخسرش حاجة غير المحاولة).
     console.log('⚠️ القاموس ناقص الكلمة الصحيحة على الأرجح — هبني تخمين بنفسي من الحروف المؤكدة.');
     const built = buildConstraintGuess(state, guessedSet);
     if (built) {
@@ -486,26 +530,41 @@ function pickNextGuess(rows) {
       return built;
     }
 
+    // مفيش أي طريقة منطقية نبني بيها تخمين (تعارض في القيود، أو كل الاحتمالات
+    // اتجربت). بدل ما نكرر نفس التخمين الاحتياطي، نحرق باقي المحاولات بكلمات
+    // بسيطة مختلفة (حرف واحد مكرر) لحد ما الجولة تنتهي طبيعيًا.
     console.log('❌ مقدرتش أبني تخمين منطقي من القيود المتاحة — هحرق باقي المحاولات بتخمينات بسيطة.');
     const burn = pickBurnGuess(guessedSet);
     if (burn) return burn;
-    return 'ابجده';
+    return 'ابجده'; // احتياطي أخير لو كل حروف الحرق اتجربت (نادر جدًا)
   }
 
   if (candidates.length === 1 || attemptsLeft <= 1) {
     return candidates[0];
   }
 
-  // تفعيل الفصل الذكي الصارم لتجنب الخسارة عند تشابه الخانات
-  console.log(`🔍 يوجد ${candidates.length} مرشحين محتملين والمحاولات المتبقية (${attemptsLeft}). جاري اختيار كلمة فاصلة من القاموس...`);
-  const bestGuess = findBestDisambiguationGuess(candidates, DICTIONARY, state, guessedSet);
-  console.log(`🧩 التخمين الفاصل المختار لتصفيّة الاحتمالات: ${bestGuess}`);
-  return bestGuess;
+  // فيه أكتر من احتمال ممكن يكون هو الكلمة الصحيحة، ولسه فيه وقت كفاية.
+  // بدل ما نجرب واحد بس ونخاطر بالخسارة، ندوّر على تخمين يفرّق بين الاحتمالات.
+  const discriminator = chooseDiscriminatingGuess(candidates);
+  if (discriminator) {
+    console.log(`🎯 فيه ${candidates.length} احتمال محتمل - هجرب كلمة تميّز بين الاحتمالات (بدل ما نراهن بالعمى): ${discriminator}`);
+    return discriminator;
+  }
+
+  let best = candidates[0], bestScore = -Infinity;
+  for (const w of candidates) {
+    const s = wordScore(w, state.testedLetters);
+    if (s > bestScore) { bestScore = s; best = w; }
+  }
+  console.log(`🧩 احتمالات متبقية: ${candidates.length} | التخمين المختار: ${best}`);
+  return best;
 }
 
+// يبني تخمين "من الصفر" ملتزم بكل القيود المؤكدة لحد دلوقتي، حتى لو الكلمة الناتجة
+// مش موجودة في قاموسنا المحلي (433 كلمة قد ميغطيش كل الكلمات الحقيقية).
 function buildConstraintGuess(state, guessedSet) {
   const { greens, excludedAt, minCount, maxCount, testedLetters } = state;
-  const slots = greens.slice();
+  const slots = greens.slice(); // null = خانة مجهولة، وإلا الحرف الأخضر المؤكد
 
   const remainingNeeded = {};
   for (const [L, min] of Object.entries(minCount)) {
@@ -519,7 +578,7 @@ function buildConstraintGuess(state, guessedSet) {
   for (const [L, count] of neededLetters) {
     for (let n = 0; n < count; n++) {
       const openSlots = emptySlots().filter(i => !excludedAt[i].has(L));
-      if (openSlots.length === 0) return null;
+      if (openSlots.length === 0) return null; // تعارض في القيود، مينفعش نبني تخمين منطقي
       slots[openSlots[0]] = L;
     }
   }
@@ -557,6 +616,10 @@ function partialMatchScore(word, state) {
   const counts = {};
   for (const L of letters) counts[L] = (counts[L] || 0) + 1;
 
+  // احترام الحروف الخضراء (الأماكن المؤكدة) بشكل صارم ودايمًا: أي كلمة
+  // مابتحافظش على مكان حرف اتأكد إنه صح، تتاستبعد نهائيًا (-Infinity) مهما
+  // كان باقي تطابقها كويس. الأخضر معلومة مؤكدة 100% من اللعبة، فمينفعش
+  // نضحّي بيها لصالح كلمة "أقرب" شكليًا بس بتكسر مكان حرف معروف.
   for (let i = 0; i < 5; i++) {
     if (state.greens[i] && letters[i] !== state.greens[i]) return -Infinity;
   }
@@ -576,6 +639,9 @@ function partialMatchScore(word, state) {
   return score;
 }
 
+// ==================================================
+// إرسال التخمين
+// ==================================================
 async function sendGuess(word) {
   if (!client || !isBotReady || isGameOver || isBreakTime) return;
   isSending = true;
@@ -589,6 +655,8 @@ async function sendGuess(word) {
   } finally {
     setTimeout(() => {
       isSending = false;
+      // لو وصل تحديث للوحة أثناء ما كنا مشغولين بالإرسال، لازم نعيد فحصه دلوقتي
+      // بدل ما نسيبه يضيع للأبد ويوقف البوت عن الرد.
       if (pendingRecheck) {
         pendingRecheck = false;
         recheckBoardNow();
@@ -601,7 +669,7 @@ async function recheckBoardNow() {
   if (isGameOver || isSending || !isBotReady || isBreakTime) return;
   if (gameRows.length === 0) return;
   const lastRow = gameRows[gameRows.length - 1];
-  if (isWinningRow(lastRow)) return;
+  if (isWinningRow(lastRow)) return; // اتعالجت بالفعل في مكانها
   if (gameRows.length >= 6) return;
   const guess = pickNextGuess(gameRows);
   if (guess) await sendGuess(guess);
@@ -612,6 +680,8 @@ async function sendGroupMessage(roomId, text) {
   try { await client.messaging.sendGroupMessage(roomId, text); } catch {}
 }
 
+// أول تخمين في الجولة: لازم يتبعت لوحده فور ما اللعبة تبدأ (اللوحة بتكون فاضية
+// ومفيش أي رسالة هتخلي الكود "يستنتج" إنه يبعت، فلازم نبعته احنا استباقيًا).
 async function sendFirstGuessIfNeeded() {
   if (firstGuessSent || isGameOver || isSending || !isBotReady || isBreakTime) return;
   firstGuessSent = true;
@@ -619,6 +689,9 @@ async function sendFirstGuessIfNeeded() {
   if (guess) await sendGuess(guess);
 }
 
+// ==================================================
+// معالجة الرسائل الواردة من بوت WOLFdle
+// ==================================================
 function scheduleNewGame(reason, delayMs = 15000) {
   if (restartTimer) return;
   console.log(`🏁 ${reason} — هتبدأ جولة جديدة بعد ${delayMs / 1000} ثوانٍ.`);
@@ -626,6 +699,7 @@ function scheduleNewGame(reason, delayMs = 15000) {
     restartTimer = null;
     resetGameState();
     if (isBreakTime) {
+      // إحنا في وقت الاستراحة دلوقتي — أجّل بدء الجولة الجديدة لحد ما الاستراحة تخلص
       gameStartPending = true;
       console.log('☕ هنأجّل بدء الجولة الجديدة لحد ما الاستراحة الحالية تخلص.');
       return;
@@ -637,11 +711,14 @@ function scheduleNewGame(reason, delayMs = 15000) {
 }
 
 async function handleWolfdleMessage(message) {
+  // رقم الروم اللي جاية منه الرسالة (تأكدنا إن targetGroupId هو الحقل الصحيح)
   const messageRoomId = message.targetGroupId ?? message.groupId ?? null;
 
+  // نتجاهل أي رسالة مش من روم اللعبة قبل أي معالجة أو تسجيل
   if (!message.isGroup) return;
   if (messageRoomId !== null && Number(messageRoomId) !== ROOM_ID) return;
 
+  // تسجيل تشخيصي اختياري (متوقف افتراضيًا) — يتفعّل فقط بتفعيل DEBUG_WOLFDLE=true
   if (process.env.DEBUG_WOLFDLE === 'true') {
     originalLog(
       `🔍 [DEBUG] event | id=${message.id} | sourceSubscriberId=${message.sourceSubscriberId} | roomId=${messageRoomId} | type=${message.type || message.mimeType || '?'} | bodyLen=${(message.body || '').length}`
@@ -654,6 +731,7 @@ async function handleWolfdleMessage(message) {
   const body = message.body || '';
   const isBoardMessage = body.includes('wolfdlebot-mp-game');
 
+  // 1) رسالة نصية (بداية/نهاية لعبة أو تنبيه)
   if (!isBoardMessage || mime.includes('text/plain')) {
     if (processedMessageIds.has(message.id)) return;
     processedMessageIds.add(message.id);
@@ -674,15 +752,17 @@ async function handleWolfdleMessage(message) {
     return;
   }
 
+  // 2) رسالة HTML فيها لوحة اللعبة
   const rows = parseBoard(body);
   if (rows.length === 0) {
+    // اللوحة لسه فاضية (اللعبة بدأت للتو) — ده وقت إرسال أول تخمين لوحدنا
     await sendFirstGuessIfNeeded();
     return;
   }
 
-  if (rows.length <= gameRows.length) return;
+  if (rows.length <= gameRows.length) return; // نفس عدد الصفوف أو أقل، متعالجش تاني
   gameRows = rows;
-  firstGuessSent = true;
+  firstGuessSent = true; // أكيد بقى في تخمين واحد على الأقل اتبعت
 
   const lastRow = rows[rows.length - 1];
   if (isWinningRow(lastRow)) {
@@ -695,17 +775,22 @@ async function handleWolfdleMessage(message) {
   }
 
   if (rows.length >= 6) {
-    return;
+    return; // اللوحة كاملة، هننتظر رسالة النهاية (فيها الكلمة الصحيحة لو خسرنا)
   }
 
   if (isGameOver) return;
 
+  // لو البوت لسه مشغول ببعت تخمين سابق، منسيبش التحديث ده يضيع — نأجّل الفحص
+  // لحد ما الإرسال الحالي يخلص (بدل ما نتجاهله للأبد ويوقف البوت عن الرد).
   if (isSending) { pendingRecheck = true; return; }
 
   const guess = pickNextGuess(rows);
   if (guess) await sendGuess(guess);
 }
 
+// ==================================================
+// نظام الدخول الذكي وإعادة الاتصال
+// ==================================================
 let isReconnecting = false;
 let readyTimeout = null;
 let reconnectTimer = null;
@@ -803,14 +888,21 @@ async function loginWithFreshClient(reason = 'التشغيل الأول') {
   }, 25000);
 }
 
+// ==================================================
+// بدء التشغيل
+// ==================================================
 console.log(`🎯 تسلسل تجربة الحروف: ${FIXED_PROBES.join(' ، ')}`);
 console.log(`⏱️ دورة اللعب: ${BREAK_ACTIVE_MS / 60000} دقيقة لعب ثم ${BREAK_REST_MS / 60000} دقايق راحة، بشكل متكرر.`);
 
 loginWithFreshClient();
 
+// ابدأ دورة اللعب/الراحة من لحظة تشغيل السكربت (54 دقيقة لعب، بعدين أول استراحة)
 setTimeout(() => scheduleNextBreakPhase(true), BREAK_ACTIVE_MS);
 
-const MAX_RUNTIME_MS = Number(process.env.BOT_MAX_RUNTIME_MS) || 5 * 60 * 60 * 1000;
+// ==================================================
+// إيقاف تلقائي بلطف قبل ما GitHub Actions يقفل الـ job إجباريًا
+// ==================================================
+const MAX_RUNTIME_MS = Number(process.env.BOT_MAX_RUNTIME_MS) || 5 * 60 * 60 * 1000; // 5 ساعات افتراضيًا
 
 if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
   setTimeout(async () => {
