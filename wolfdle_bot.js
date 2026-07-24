@@ -363,7 +363,7 @@ function wordMatchesConstraints(word, state) {
 const MIN_MATCHED_CELLS_TO_SOLVE = 3;
 
 // ==================================================
-// محاكاة نتائج Wordle للتمييز بين الاحتمالات (Minimax Disambiguation)
+// محاكاة نتائج Wordle للتمييز الذكي بين الاحتمالات (Minimax الصارم)
 // ==================================================
 function simulateWordleFeedback(guess, target) {
   const gLetters = [...guess];
@@ -398,14 +398,19 @@ function feedbackSignature(feedback) {
 function findBestDisambiguationGuess(candidates, dictionary, state, guessedSet) {
   if (candidates.length === 1) return candidates[0];
 
-  let bestWord = candidates[0];
+  const attemptsLeft = 6 - (state.guessedWords.length || 0);
+  // إذا كانت الاحتمالات المتبقية تساوي أو تزيد عن المحاولات المتبقية، نمنع تخمين أي كلمة مرشحة مباشرة لتفادي الخسارة
+  const mustSplit = candidates.length >= attemptsLeft;
+
+  let bestWord = null;
   let minMaxRemaining = Infinity;
   let bestScore = -Infinity;
 
-  const pool = candidates.length <= 15 ? candidates : Array.from(new Set([...candidates, ...dictionary.slice(0, 150)]));
-
-  for (const guessWord of pool) {
+  for (const guessWord of dictionary) {
     if (guessedSet.has(guessWord)) continue;
+
+    const isCandidate = candidates.includes(guessWord);
+    if (mustSplit && isCandidate) continue; // حظر اختيار مرشح مباشر واجبار البوت على اختيار كلمة فاصلة
 
     const outcomeCounts = {};
     for (const target of candidates) {
@@ -422,6 +427,11 @@ function findBestDisambiguationGuess(candidates, dictionary, state, guessedSet) 
       bestScore = score;
       bestWord = guessWord;
     }
+  }
+
+  // إذا لم يتم العثور على كلمة فاصلة بسبب قيود القاموس الصارمة، نلجأ لأول مرشح كحل أخير
+  if (!bestWord) {
+    return candidates[0];
   }
 
   return bestWord;
@@ -484,10 +494,10 @@ function pickNextGuess(rows) {
     return candidates[0];
   }
 
-  // استخدام خوارزمية التمييز الذكي (Minimax) عند وجود أكثر من احتمال لتجنب التجربة العشوائية الخاسرة
-  console.log(`🔍 يوجد ${candidates.length} مرشحين محتملين. جاري اختيار التخمين الأفضل للتمييز بينهم بدقة...`);
+  // تفعيل الفصل الذكي الصارم لتجنب الخسارة عند تشابه الخانات
+  console.log(`🔍 يوجد ${candidates.length} مرشحين محتملين والمحاولات المتبقية (${attemptsLeft}). جاري اختيار كلمة فاصلة من القاموس...`);
   const bestGuess = findBestDisambiguationGuess(candidates, DICTIONARY, state, guessedSet);
-  console.log(`🧩 التخمين المختار للتمييز بين الاحتمالات: ${bestGuess}`);
+  console.log(`🧩 التخمين الفاصل المختار لتصفيّة الاحتمالات: ${bestGuess}`);
   return bestGuess;
 }
 
