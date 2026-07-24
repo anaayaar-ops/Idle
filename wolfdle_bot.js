@@ -523,6 +523,14 @@ function partialMatchScore(word, state) {
   const counts = {};
   for (const L of letters) counts[L] = (counts[L] || 0) + 1;
 
+  // احترام الحروف الخضراء (الأماكن المؤكدة) بشكل صارم ودايمًا: أي كلمة
+  // مابتحافظش على مكان حرف اتأكد إنه صح، تتاستبعد نهائيًا (-Infinity) مهما
+  // كان باقي تطابقها كويس. الأخضر معلومة مؤكدة 100% من اللعبة، فمينفعش
+  // نضحّي بيها لصالح كلمة "أقرب" شكليًا بس بتكسر مكان حرف معروف.
+  for (let i = 0; i < 5; i++) {
+    if (state.greens[i] && letters[i] !== state.greens[i]) return -Infinity;
+  }
+
   for (const [L, min] of Object.entries(state.minCount)) {
     if ((counts[L] || 0) < min) return -Infinity;
   }
@@ -811,4 +819,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-      }
+}
