@@ -399,8 +399,10 @@ function findBestDisambiguationGuess(candidates, dictionary, state, guessedSet) 
   if (candidates.length === 1) return candidates[0];
 
   const attemptsLeft = 6 - (state.guessedWords.length || 0);
-  // إذا كانت الاحتمالات المتبقية تساوي أو تزيد عن المحاولات المتبقية، نمنع تخمين أي كلمة مرشحة مباشرة لتفادي الخسارة
-  const mustSplit = candidates.length >= attemptsLeft;
+  
+  // ✅ التعديل الحاسم هنا: منع خيار الكلمات المرشحة تماماً إذا كان عددها أكبر من أو يساوي المحاولات المتبقية
+  // أو إذا كنا في آخر محاولتين وكان هناك أكثر من احتمال لتجنب التخمين العشوائي الخاطئ
+  const mustSplit = candidates.length >= attemptsLeft || attemptsLeft <= 2;
 
   let bestWord = null;
   let minMaxRemaining = Infinity;
@@ -410,7 +412,7 @@ function findBestDisambiguationGuess(candidates, dictionary, state, guessedSet) 
     if (guessedSet.has(guessWord)) continue;
 
     const isCandidate = candidates.includes(guessWord);
-    if (mustSplit && isCandidate) continue; // حظر اختيار مرشح مباشر واجبار البوت على اختيار كلمة فاصلة
+    if (mustSplit && isCandidate) continue; // حظر تام لاختيار المرشح المباشر لإجبار البوت على جلب كلمة فاصلة
 
     const outcomeCounts = {};
     for (const target of candidates) {
@@ -429,7 +431,7 @@ function findBestDisambiguationGuess(candidates, dictionary, state, guessedSet) 
     }
   }
 
-  // إذا لم يتم العثور على كلمة فاصلة بسبب قيود القاموس الصارمة، نلجأ لأول مرشح كحل أخير
+  // إذا لم يجد كلمة فاصلة تطابق الشرط بسبب ضيق القاموس، نختار الكلمة الأكثر تنوعاً في الحروف من القاموس عموماً
   if (!bestWord) {
     return candidates[0];
   }
@@ -819,3 +821,5 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
 }
+
+```
