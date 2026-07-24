@@ -233,7 +233,7 @@ function totalMatchedCells(rows) {
 // ده بيتكرر طول مدة تشغيل الجلسة كلها.
 // ==================================================
 const BREAK_ACTIVE_MS = 50 * 60 * 1000; // 50 دقيقة لعب متواصل
-const BREAK_REST_MS = 10 * 60 * 1000;    // 10 دقائق راحة
+const BREAK_REST_MS = 10 * 60 * 1000;   // 10 دقائق راحة
 
 let isBreakTime = false;
 let gameStartPending = false; // هل فيه أمر "!كلمات" اتأجل بسبب الاستراحة ولازم يتبعت لما تخلص؟
@@ -387,13 +387,17 @@ function wordMatchesConstraints(word, state) {
   return true;
 }
 
+// عدد الخانات الملوّنة (أخضر/أصفر) اللي لو وصلنالها نوقف تجربة الحروف
+// ونبدأ نبحث عن الإجابة الفعلية (من الكلمات المتعلمة أولاً ثم القاموس).
+const MIN_MATCHED_CELLS_TO_SOLVE = 3;
+
 function pickNextGuess(rows) {
   const matched = totalMatchedCells(rows);
-  const stillProbing = rows.length < FIXED_PROBES.length && matched < 5;
+  const stillProbing = rows.length < FIXED_PROBES.length && matched < MIN_MATCHED_CELLS_TO_SOLVE;
 
   if (stillProbing) {
     const nextProbe = FIXED_PROBES[rows.length];
-    console.log(`🔤 وضع تجربة الحروف (${rows.length + 1}/${FIXED_PROBES.length}) | خانات ملوّنة لحد الآن: ${matched}/5 | التخمين: ${nextProbe}`);
+    console.log(`🔤 وضع تجربة الحروف (${rows.length + 1}/${FIXED_PROBES.length}) | خانات ملوّنة لحد الآن: ${matched}/${MIN_MATCHED_CELLS_TO_SOLVE} | التخمين: ${nextProbe}`);
     return nextProbe;
   }
 
@@ -807,4 +811,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-         }
+      }
