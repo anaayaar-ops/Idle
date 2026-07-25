@@ -533,17 +533,10 @@ function pickNextGuess(rows) {
     !guessedSet.has(w) && wordMatchesConstraints(w, state)
   );
   if (learnedCandidates.length > 0) {
-    // لو فيه أكتر من احتمال محفوظ وارد يكون هو الحل، ومفيش ضمان إن أي واحد
-    // فيهم هو الصح، الأفضل إننا نكمّل تجربة حروف من التسلسل الثابت (لو
-    // لسه فاضل منه محاولات ماتجربتش) عشان نكشف حروف جديدة ونضيّق الاحتمالات
-    // بدل ما نراهن بالعمى على واحدة من ذاكرتنا ونخاطر بخسارة الجولة.
-    if (learnedCandidates.length > 1) {
-      const nextUnusedProbe = FIXED_PROBES.find(p => !guessedSet.has(p));
-      if (nextUnusedProbe && attemptsLeft > 1) {
-        console.log(`🧠🔎 لقينا ${learnedCandidates.length} كلمة محفوظة محتملة، بس أكتر من احتمال — هكمّل تجربة حروف (${nextUnusedProbe}) الأول عشان أضيّق الاختيار.`);
-        return nextUnusedProbe;
-      }
-    }
+    // من أول ما يتجمّع 3 خانات ملوّنة (MIN_MATCHED_CELLS_TO_SOLVE)، نوقف تجربة
+    // الحروف العشوائية ونحاول نحسم الكلمة فورًا. لو فيه أكتر من احتمال محفوظ
+    // بيطابق القيود، نستخدم تخمين تمييزي بينهم (بدون رجوع لتجربة حروف جديدة)
+    // عشان نفضل نحاول نحسم بسرعة.
     const pick = pickBestFromCandidates(learnedCandidates, state.testedLetters, attemptsLeft);
     if (learnedCandidates.length > 1) {
       console.log(`🧠🎯 لقينا ${learnedCandidates.length} كلمة من ذاكرتنا بتطابق القيود، هجرب كلمة تميّز بينهم: ${pick}`);
@@ -963,4 +956,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-      }
+              }
