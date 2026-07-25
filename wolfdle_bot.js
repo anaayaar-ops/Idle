@@ -59,16 +59,57 @@ const START_COMMAND = '!كلمات';
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ==================================================
-// تحميل قاموس الكلمات (5 حروف، مطبّع: ة → ه، همزات الألف → ا)
+// دالة التطبيع الموحّدة (تُستخدم على أي حرف/كلمة تدخل النظام مهما كان مصدرها:
+// القاموس، الكلمات المتعلمة، أو الحروف اللي بترجع من لوحة اللعبة نفسها).
+// بتشيل:
+//   - كل علامات التشكيل (حركات) لأنها مش حرف مستقل ومفروض متتحسبش ضمن الـ5 حروف
+//   - توحّد أشكال الهمزة (أ إ آ) إلى ا
+//   - توحّد التاء المربوطة (ة) والهاء (ه) في رمز واحد
+// أي نقطة دخول للنظام (تحميل القاموس، تحميل الكلمات المتعلمة، تحليل خانات
+// اللوحة) لازم تمرّ على الدالة دي، عشان منوقعش في تكرار "وهمي" زي:
+//   - كلمة 4 حروف + حركة تتحسب حرف خامس فتبان كأنها 5 حروف صحيحة
+//   - "مائدة" و"مآئدة" و"ماءده" تتحسب 3 كلمات مختلفة رغم إنها نفس الكلمة
+//   - تلميح فيه "ه" يتكرر بعدين بـ"ة" باعتبارها حرف/كلمة جديدة
+// ==================================================
+function normalizeWord(w) {
+  return String(w || '')
+    .replace(/ة/g, 'ه')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670]/g, '') // إزالة التشكيل (الحركات)
+    .trim();
+}
+
+// ==================================================
+// تحميل قاموس الكلمات (5 حروف فقط بعد التطبيع، بدون تكرار)
 // ==================================================
 const WORDLIST_PATH = path.join(__dirname, 'ar_words5.txt');
 let DICTIONARY = [];
 try {
-  DICTIONARY = fs.readFileSync(WORDLIST_PATH, 'utf8')
-    .split('\n')
-    .map(w => w.trim())
-    .filter(w => w.length === 5);
-  console.log(`📚 تم تحميل ${DICTIONARY.length} كلمة من القاموس.`);
+  const rawLines = fs.readFileSync(WORDLIST_PATH, 'utf8').split('\n');
+  const seenWords = new Set();
+  let skippedNotFiveAfterNormalize = 0;
+  let skippedDuplicates = 0;
+
+  for (const rawLine of rawLines) {
+    const raw = rawLine.trim();
+    if (!raw) continue;
+    const normalized = normalizeWord(raw);
+    if (normalized.length !== 5) {
+      // كانت شكلها 5 "حروف" قبل التطبيع بس فيها حركة أو همزة زيادة عدّت
+      // كحرف، وبعد الشيل بقت 4 (أو أي عدد غير 5) — نستبعدها فورًا.
+      skippedNotFiveAfterNormalize++;
+      continue;
+    }
+    if (seenWords.has(normalized)) {
+      // نفس الكلمة اتكررت في القاموس بأكتر من شكل إملائي (همزة/تاء مربوطة مختلفة)
+      skippedDuplicates++;
+      continue;
+    }
+    seenWords.add(normalized);
+    DICTIONARY.push(normalized);
+  }
+
+  console.log(`📚 تم تحميل ${DICTIONARY.length} كلمة من القاموس بعد التطبيع (استُبعد ${skippedNotFiveAfterNormalize} لعدم اكتمالها 5 حروف حقيقية بعد شيل الحركات، و${skippedDuplicates} كتكرار لنفس الكلمة بشكل إملائي مختلف).`);
 } catch (err) {
   console.error('❌ فشل تحميل ملف القاموس ar_words5.txt:', err.message);
 }
@@ -81,19 +122,15 @@ try {
 const LEARNED_WORDS_PATH = path.join(__dirname, 'learned_words.json');
 let LEARNED_WORDS = new Set();
 
-function normalizeWord(w) {
-  return String(w || '')
-    .replace(/ة/g, 'ه')
-    .replace(/[أإآ]/g, 'ا')
-    .replace(/[\u0610-\u061A\u064B-\u065F\u0670]/g, '') // إزالة التشكيل
-    .trim();
-}
-
 function loadLearnedWords() {
   try {
     if (fs.existsSync(LEARNED_WORDS_PATH)) {
       const data = JSON.parse(fs.readFileSync(LEARNED_WORDS_PATH, 'utf8'));
-      if (Array.isArray(data)) LEARNED_WORDS = new Set(data.map(normalizeWord).filter(w => w.length === 5));
+      if (Array.isArray(data)) {
+        LEARNED_WORDS = new Set(
+          data.map(normalizeWord).filter(w => w.length === 5)
+        );
+      }
     }
     console.log(`🧠 تم تحميل ${LEARNED_WORDS.size} كلمة اتعلمناها من جولات سابقة.`);
   } catch (err) {
@@ -228,8 +265,8 @@ function totalMatchedCells(rows) {
 }
 
 // ==================================================
-// نظام "الراحة الدورية" لمنع السبام: البوت بيلعب 54 دقيقة متواصلة ثم ياخد
-// راحة 6 دقايق (يوقف عن إرسال أي تخمين أو أمر بدء جولة)، وبعدين يكمّل عادي.
+// نظام "الراحة الدورية" لمنع السبام: البوت بيلعب 50 دقيقة متواصلة ثم ياخد
+// راحة 10 دقايق (يوقف عن إرسال أي تخمين أو أمر بدء جولة)، وبعدين يكمّل عادي.
 // ده بيتكرر طول مدة تشغيل الجلسة كلها.
 // ==================================================
 const BREAK_ACTIVE_MS = 50 * 60 * 1000; // 50 دقيقة لعب متواصل
@@ -241,7 +278,7 @@ let gameStartPending = false; // هل فيه أمر "!كلمات" اتأجل ب�
 function scheduleNextBreakPhase(isEnteringBreak) {
   if (isEnteringBreak) {
     isBreakTime = true;
-    console.log('☕ بداية استراحة 6 دقايق (لمنع السبام) — البوت هيوقف عن اللعب مؤقتًا وهيرجع تلقائيًا بعدها.');
+    console.log('☕ بداية استراحة (لمنع السبام) — البوت هيوقف عن اللعب مؤقتًا وهيرجع تلقائيًا بعدها.');
     setTimeout(() => scheduleNextBreakPhase(false), BREAK_REST_MS);
   } else {
     isBreakTime = false;
@@ -298,13 +335,16 @@ function resetGameState() {
 
 // ==================================================
 // تحليل HTML اللعبة (استخراج الصفوف والحالات)
+// كل حرف بيرجع من اللوحة بيتطبّع فورًا (بيشيل أي حركة عالقة وبيوحّد أشكال
+// الهمزة/التاء المربوطة)، عشان أي مقارنة أو بناء تخمين لاحقًا يبقى متسق
+// 100% مع نفس التطبيع المستخدم في القاموس والكلمات المتعلمة.
 // ==================================================
 function parseBoard(html) {
   const itemRegex = /<div class="wolfdlebot-mp-game__content__container__item ([\w-]+)"[^>]*>([^<]*)<\/div>/g;
   const cells = [];
   let m;
   while ((m = itemRegex.exec(html))) {
-    cells.push({ status: m[1], letter: (m[2] || '').trim() });
+    cells.push({ status: m[1], letter: normalizeWord((m[2] || '').trim()) });
   }
   const colMatch = html.match(/--columns:(\d+)/);
   const columns = colMatch ? parseInt(colMatch[1], 10) : 5;
@@ -483,7 +523,7 @@ function pickNextGuess(rows) {
     return nextProbe;
   }
 
-  // إما لقينا 5 خانات ملوّنة (كل حروف الكلمة معروفة)، أو خلّصنا الـ5 تخمينات الجاهزة
+  // إما لقينا خانات ملوّنة كفاية، أو خلّصنا التخمينات الجاهزة
   const state = analyzeRows(rows);
   const guessedSet = new Set(state.guessedWords);
   const attemptsLeft = 6 - rows.length;
@@ -493,6 +533,17 @@ function pickNextGuess(rows) {
     !guessedSet.has(w) && wordMatchesConstraints(w, state)
   );
   if (learnedCandidates.length > 0) {
+    // لو فيه أكتر من احتمال محفوظ وارد يكون هو الحل، ومفيش ضمان إن أي واحد
+    // فيهم هو الصح، الأفضل إننا نكمّل تجربة حروف من التسلسل الثابت (لو
+    // لسه فاضل منه محاولات ماتجربتش) عشان نكشف حروف جديدة ونضيّق الاحتمالات
+    // بدل ما نراهن بالعمى على واحدة من ذاكرتنا ونخاطر بخسارة الجولة.
+    if (learnedCandidates.length > 1) {
+      const nextUnusedProbe = FIXED_PROBES.find(p => !guessedSet.has(p));
+      if (nextUnusedProbe && attemptsLeft > 1) {
+        console.log(`🧠🔎 لقينا ${learnedCandidates.length} كلمة محفوظة محتملة، بس أكتر من احتمال — هكمّل تجربة حروف (${nextUnusedProbe}) الأول عشان أضيّق الاختيار.`);
+        return nextUnusedProbe;
+      }
+    }
     const pick = pickBestFromCandidates(learnedCandidates, state.testedLetters, attemptsLeft);
     if (learnedCandidates.length > 1) {
       console.log(`🧠🎯 لقينا ${learnedCandidates.length} كلمة من ذاكرتنا بتطابق القيود، هجرب كلمة تميّز بينهم: ${pick}`);
@@ -518,7 +569,7 @@ function pickNextGuess(rows) {
       return scored[0].w;
     }
 
-    // القاموس (433 كلمة) ناقص الكلمة الصحيحة على الأرجح. بدل ما نستسلم بتخمين عشوائي،
+    // القاموس ناقص الكلمة الصحيحة على الأرجح. بدل ما نستسلم بتخمين عشوائي،
     // نبني إحنا كلمة بأيدينا تحترم كل القيود المؤكدة: نثبّت الحروف الخضراء، نحط الحروف
     // الصفراء في خانات فاضية ميتستبعدوش منها، ونملأ أي خانة لسه مجهولة بحرف عالي التكرار
     // لسه ما اتجربش (عشان لو الكلمة اتقبلت من اللعبة تجيب معلومة جديدة، ولو اترفضت
@@ -561,7 +612,7 @@ function pickNextGuess(rows) {
 }
 
 // يبني تخمين "من الصفر" ملتزم بكل القيود المؤكدة لحد دلوقتي، حتى لو الكلمة الناتجة
-// مش موجودة في قاموسنا المحلي (433 كلمة قد ميغطيش كل الكلمات الحقيقية).
+// مش موجودة في قاموسنا المحلي (القاموس قد ميغطيش كل الكلمات الحقيقية).
 function buildConstraintGuess(state, guessedSet) {
   const { greens, excludedAt, minCount, maxCount, testedLetters } = state;
   const slots = greens.slice(); // null = خانة مجهولة، وإلا الحرف الأخضر المؤكد
@@ -896,7 +947,7 @@ console.log(`⏱️ دورة اللعب: ${BREAK_ACTIVE_MS / 60000} دقيقة �
 
 loginWithFreshClient();
 
-// ابدأ دورة اللعب/الراحة من لحظة تشغيل السكربت (54 دقيقة لعب، بعدين أول استراحة)
+// ابدأ دورة اللعب/الراحة من لحظة تشغيل السكربت
 setTimeout(() => scheduleNextBreakPhase(true), BREAK_ACTIVE_MS);
 
 // ==================================================
@@ -912,4 +963,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-}
+      }
