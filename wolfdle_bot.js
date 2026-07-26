@@ -58,19 +58,6 @@ const START_COMMAND = '!كلمات';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// ==================================================
-// دالة التطبيع الموحّدة (تُستخدم على أي حرف/كلمة تدخل النظام مهما كان مصدرها:
-// القاموس، الكلمات المتعلمة، أو الحروف اللي بترجع من لوحة اللعبة نفسها).
-// بتشيل:
-//   - كل علامات التشكيل (حركات) لأنها مش حرف مستقل ومفروض متتحسبش ضمن الـ5 حروف
-//   - توحّد أشكال الهمزة (أ إ آ) إلى ا
-//   - توحّد التاء المربوطة (ة) والهاء (ه) في رمز واحد
-// أي نقطة دخول للنظام (تحميل القاموس، تحميل الكلمات المتعلمة، تحليل خانات
-// اللوحة) لازم تمرّ على الدالة دي، عشان منوقعش في تكرار "وهمي" زي:
-//   - كلمة 4 حروف + حركة تتحسب حرف خامس فتبان كأنها 5 حروف صحيحة
-//   - "مائدة" و"مآئدة" و"ماءده" تتحسب 3 كلمات مختلفة رغم إنها نفس الكلمة
-//   - تلميح فيه "ه" يتكرر بعدين بـ"ة" باعتبارها حرف/كلمة جديدة
-// ==================================================
 function normalizeWord(w) {
   return String(w || '')
     .replace(/ة/g, 'ه')
@@ -489,6 +476,68 @@ function chooseDiscriminatingGuess(candidates) {
   return best;
 }
 
+// ==================================================
+// دالة "تغطية الخانة المجهولة": لما تكون فيه خانة واحدة بس مش معروفة ومعانا
+// أكتر من كلمة صحيحة محتملة (زي منشور/منهور/منعور/مندور/منصور)، بدل ما
+// نعتمد بس على تخمين تمييزي معقّد، نجمع كل الحروف اللي ظهرت فعليًا في هذه
+// الخانة من بين الكلمات الصحيحة المطابقة، نستبعد اللي جُربت قبل كده، ولو
+// عددهم أقل من 5 نكمّل بحروف أبجدية عربية لسه ما اتجربتش (بنفس ترتيب
+// BURN_LETTERS). كده بنضمن تغطية كل الاحتمالات المنطقية بدل ما نفوّت حرف
+// صحيح زي "ص" في مثال "منصور".
+// ==================================================
+function getUnknownPositions(greens) {
+  return greens.map((g, i) => (g === null ? i : -1)).filter(i => i !== -1);
+}
+
+function collectCandidatePool(state, guessedSet) {
+  const pool = new Set([...DICTIONARY, ...LEARNED_WORDS]);
+  return [...pool].filter(w => !guessedSet.has(w) && wordMatchesConstraints(w, state));
+}
+
+function buildAmbiguousSlotProbeQueue(state, guessedSet, minCount = 5) {
+  const unknownPositions = getUnknownPositions(state.greens);
+  // الدالة دي مخصصة لحالة "خانة واحدة مجهولة" بالظبط (زي الصورة)
+  if (unknownPositions.length !== 1) return [];
+
+  const pos = unknownPositions[0];
+  const candidates = collectCandidatePool(state, guessedSet);
+  if (candidates.length <= 1) return []; // مفيش تعدد احتمالات أصلًا
+
+  // 1) الحروف المختلفة اللي ظهرت فعليًا في الخانة المجهولة من بين الكلمات الصحيحة
+  const lettersFromCandidates = [...new Set(candidates.map(w => w[pos]))];
+
+  // 2) استبعاد الحروف اللي جُربت فعلاً (في أي خانة) أو اتستبعدت في الخانة دي تحديدًا
+  let freshLetters = lettersFromCandidates.filter(
+    L => !state.testedLetters.has(L) && !state.excludedAt[pos].has(L)
+  );
+
+  // 3) لو أقل من 5، كمّل بحروف أبجدية عربية لسه ما اتجربتش
+  if (freshLetters.length < minCount) {
+    const used = new Set([...freshLetters, ...state.testedLetters]);
+    for (const L of BURN_LETTERS) {
+      if (freshLetters.length >= minCount) break;
+      if (!used.has(L) && !state.excludedAt[pos].has(L)) {
+        freshLetters.push(L);
+        used.add(L);
+      }
+    }
+  }
+
+  // 4) ابني كلمة تخمين كاملة لكل حرف مرشح (الحروف الخضراء ثابتة + الحرف في الخانة المجهولة)
+  const queue = [];
+  for (const L of freshLetters) {
+    const slots = state.greens.slice();
+    slots[pos] = L;
+    const word = slots.join('');
+    if (guessedSet.has(word)) continue;
+    // فضّل كلمة حقيقية من نفس المرشحين لو موجودة (أفيد لو صح واللعبة تقبلها)
+    const realMatch = candidates.find(w => w[pos] === L);
+    queue.push(realMatch || word);
+  }
+
+  return queue;
+}
+
 // يختار أفضل تخمين من مجموعة احتمالات (سواء كانت كلمات متعلمة أو كلمات قاموس):
 // لو احتمال واحد بس أو آخر محاولة متبقية -> يجزم عليه مباشرة.
 // لو أكتر من احتمال ولسه فيه وقت -> يستخدم التخمين التمييزي عشان يضيّق
@@ -533,6 +582,16 @@ function pickNextGuess(rows) {
     !guessedSet.has(w) && wordMatchesConstraints(w, state)
   );
   if (learnedCandidates.length > 0) {
+    // لو فيه خانة مجهولة واحدة بس وأكتر من احتمال، جرّب قايمة الحروف المرشحة
+    // (بتغطي كل الاحتمالات المنطقية بدل ما نعتمد على تخمين تمييزي واحد بس)
+    if (learnedCandidates.length > 1) {
+      const slotQueue = buildAmbiguousSlotProbeQueue(state, guessedSet);
+      if (slotQueue.length > 0) {
+        console.log(`🅰️ خانة مجهولة واحدة و${learnedCandidates.length} احتمال من الكلمات المتعلمة - هجرب حروف مرشحة بالترتيب: ${slotQueue.join(' ، ')}`);
+        return slotQueue[0];
+      }
+    }
+
     // من أول ما يتجمّع 3 خانات ملوّنة (MIN_MATCHED_CELLS_TO_SOLVE)، نوقف تجربة
     // الحروف العشوائية ونحاول نحسم الكلمة فورًا. لو فيه أكتر من احتمال محفوظ
     // بيطابق القيود، نستخدم تخمين تمييزي بينهم (بدون رجوع لتجربة حروف جديدة)
@@ -581,6 +640,16 @@ function pickNextGuess(rows) {
     const burn = pickBurnGuess(guessedSet);
     if (burn) return burn;
     return 'ابجده'; // احتياطي أخير لو كل حروف الحرق اتجربت (نادر جدًا)
+  }
+
+  // لو فيه خانة مجهولة واحدة بس وأكتر من احتمال من القاموس، جرّب قايمة
+  // الحروف المرشحة بنفس المنطق قبل ما نلجأ للتخمين التمييزي العام.
+  if (candidates.length > 1) {
+    const slotQueue = buildAmbiguousSlotProbeQueue(state, guessedSet);
+    if (slotQueue.length > 0) {
+      console.log(`🅰️ خانة مجهولة واحدة و${candidates.length} احتمال من القاموس - هجرب حروف مرشحة بالترتيب: ${slotQueue.join(' ، ')}`);
+      return slotQueue[0];
+    }
   }
 
   if (candidates.length === 1 || attemptsLeft <= 1) {
@@ -956,4 +1025,4 @@ if (process.env.GITHUB_ACTIONS === 'true' || process.env.BOT_MAX_RUNTIME_MS) {
     process.exit(0);
   }, MAX_RUNTIME_MS);
   console.log(`🛑 هيقفل البوت نفسه تلقائيًا بعد ${Math.round(MAX_RUNTIME_MS / 60000)} دقيقة عشان يفضل ضمن حدود GitHub Actions.`);
-              }
+        }
